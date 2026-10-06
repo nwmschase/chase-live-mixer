@@ -556,7 +556,7 @@
   }
 
   async function loadProjects() {
-    const res = await fetch("projects.json");
+    const res = await fetch("../projects.json");
     if (!res.ok) throw new Error("projects.json HTTP " + res.status);
     projectsList = await res.json();
     const sel = $("project");
@@ -572,7 +572,7 @@
   }
 
   function stemUrl(projId, stem, ext) {
-    return "stems/" + encodeURIComponent(projId) + "/" + encodeURIComponent(stem) + "." + (ext || "mp3");
+    return "../stems/" + encodeURIComponent(projId) + "/" + encodeURIComponent(stem) + "." + (ext || "mp3");
   }
 
   async function loadStems() {
