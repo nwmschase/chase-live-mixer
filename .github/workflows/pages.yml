@@ -1,0 +1,52 @@
+name: Deploy GitHub Pages
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Decode stem chunks
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for proj in stems/*; do
+            [ -d "$proj" ] || continue
+            for b64 in "$proj"/*.mp3.b64; do
+              [ -f "$b64" ] || continue
+              out="${b64%.b64}"
+              base64 -d "$b64" > "$out"
+              echo "decoded $out ($(wc -c < "$out") bytes)"
+            done
+            for first in "$proj"/*.mp3.b64.00; do
+              [ -f "$first" ] || continue
+              base="${first%.b64.00}"
+              cat "$base".b64.* > "$base.b64"
+              base64 -d "$base.b64" > "$base"
+              rm -f "$base".b64 "$base".b64.*
+              echo "decoded $base ($(wc -c < "$base") bytes)"
+            done
+          done
+          ls -lah stems/* || true
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
