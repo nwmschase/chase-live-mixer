@@ -1,0 +1,35 @@
+; min-width: 200px; }
+  .seek-wrap input[type="range"] { flex: 1; }
+  .time { font-variant-numeric: tabular-nums; color: #b8b2a4; font-size: 0.88rem; min-width: 96px; }
+  .meter {
+    width: 120px; height: 10px; background: #0e1014; border-radius: 4px; overflow: hidden; border: 1px solid #343a42;
+  }
+  .meter > i { display: block; height: 100%; width: 0%; background: linear-gradient(90deg, #2f6b45, #c8b99a 70%, #8d1d1d); }
+  .stem-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 720px) { .stem-grid { grid-template-columns: 1fr; } }
+  .stem {
+    background: #1a1e24; border: 1px solid #2c3138; border-radius: 10px; padding: 12px 14px;
+  }
+  .stem h2 { margin: 0 0 8px; font-size: 1.05rem; color: #e0b4b4; letter-spacing: 0.04em; }
+  .stem-actions { display: flex; gap: 6px; margin-bottom: 8px; }
+  label.slider {
+    display: grid; grid-template-columns: 110px 1fr 56px; gap: 8px; align-items: center;
+    margin: 7px 0; font-size: 0.9rem;
+  }
+  label.slider input[type="range"] { width: 100%; }
+  output { text-align: right; font-variant-numeric: tabular-nums; color: #d9d3c5; }
+  .hint { color: #8d887c; font-size: 0.82rem; margin: 6px 0 0; }
+  .status {
+    margin-top: 12px; padding: 10px 12px; border-radius: 8px; background: #1a1e24; border: 1px solid #2c3138;
+    white-space: pre-wrap; font-size: 0.9rem; min-height: 1.4em;
+  }
+  .status.ok { background: #17261c; border-color: #2f6b45; }
+  .status.err { background: #3a1717; border-color: #8d1d1d; }
+  .eq-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 720px) { .eq-cols { grid-template-columns: 1fr; } }
+  .nav { margin-bottom: 10px; font-size: 0.88rem; color: #8d887c; }
+</style>
+</head>
+<body>
+<main>
+  <div class="nav">Chase live mixer · static · free

@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Live mix</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { font-family: ui-sans-serif, system-ui, sans-serif; background: #121418; color: #e6e2d8; margin: 0; }
+  main { max-width: 980px; margin: 0 auto; padding: 24px 18px 72px; }
+  h1 { font-weight: 560; font-size: 1.35rem; letter-spacing: 0.04em; margin: 0 0 0.2rem; }
+  p.lead { color: #a39e92; margin: 0 0 16px; }
+  a { color: #e0b4b4; }
+  fieldset {
+    border: 1px solid #2c3138; border-radius: 10px; margin: 14px 0; padding: 12px 16px 16px;
+  }
+  legend { padding: 0 6px; color: #c8b99a; font-weight: 560; letter-spacing: 0.03em; }
+  .transport {
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+    background: #1a1e24; border: 1px solid #2c3138; border-radius: 10px; padding: 12px 14px; margin-bottom: 14px;
+  }
+  .transport button, button.primary, button.ghost, button.tiny {
+    background: #8d1d1d; color: #fff; border: 0; border-radius: 8px; padding: 10px 16px;
+    font-size: 0.95rem; cursor: pointer;
+  }
+  button.ghost { background: #2a3038; }
+  button.tiny { padding: 4px 10px; font-size: 0.78rem; border-radius: 6px; background: #2a3038; }
+  button.tiny.on { background: #8d1d1d; }
+  button.tiny.solo-on { background: #6b4a12; }
+  button:disabled { opacity: 0.45; cursor: default; }
+  button.primary { background: #2f6b45; font-weight: 600; }
+  select, input[type="text"] {
+    background: #1c2026; color: #eee; border: 1px solid #343a42; border-radius: 6px; padding: 7px 10px;
+  }
+  .seek-wrap { flex: 1 1 220px; display: flex; align-items: center; gap: 8px
