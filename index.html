@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Live mix</title></head>
+<body style="background:#121418;color:#e6e2d8;font-family:system-ui;padding:24px">
+<p id="s">Loading mixer…</p>
+<script>
+(async () => {
+  const s = document.getElementById('s');
+  try {
+    const n = 18;
+    const parts = await Promise.all([...Array(n)].map((_,i) => fetch('index.part' + (i+1) + '.txt').then(r => {
+      if (!r.ok) throw new Error('part ' + (i+1) + ' HTTP ' + r.status);
+      return r.text();
+    })));
+    document.open();
+    document.write(parts.join(''));
+    document.close();
+  } catch (e) {
+    s.textContent = 'Load failed: ' + e.message;
+  }
+})();
+</script>
+</body></html>
