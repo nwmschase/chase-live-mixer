@@ -111,10 +111,10 @@
         <button type="button" class="tiny solo-btn" data-stem="vocals">Solo</button>
       </div>
       <label class="slider">gain dB
-        <input type="range" id="gain_vocals" min="-24" max="12" step="0.5" value="-9">
-        <output>-9</output>
+        <input type="range" id="gain_vocals" min="-24" max="12" step="0.5" value="-3">
+        <output>-3</output>
       </label>
-      <p class="hint">Demucs vocals layered on the full mix</p>
+      <p class="hint">Demucs vocals layered on the full mix — Solo to verify; default −3 dB so FX cut through</p>
     </div>
   </div>
 
@@ -450,19 +450,41 @@
   async function startFrom(offset) {
     ensureGraph();
     if (!tracksReady) throw new Error("Load tracks first.");
+    if (!audioEls.full || !audioEls.full.src || !audioEls.vocals || !audioEls.vocals.src) {
+      throw new Error("Both full and vocals must be loaded.");
+    }
     offset = syncSeekAll(offset);
     if (ctx.state === "suspended") await ctx.resume();
+    applyTrackGains();
     const plays = [];
     TRACKS.forEach((s) => {
       const a = audioEls[s];
       if (!a || !a.src) return;
       plays.push(
-        a.play().catch((err) => {
-          throw new Error("Play failed (" + s + "): " + (err && err.message ? err.message : err));
+        a.play().then(() => s).catch((err) => {
+          const msg = err && err.message ? err.message : String(err);
+          throw new Error("Play failed (" + s + "): " + msg);
         })
       );
     });
-    await Promise.all(plays);
+    try {
+      await Promise.all(plays);
+    } catch (err) {
+      pauseAllElements();
+      playing = false;
+      paused = false;
+      throw err;
+    }
+    // Confirm both actually left paused state (iOS can "succeed" then stall).
+    const stuck = TRACKS.filter((s) => {
+      const a = audioEls[s];
+      return a && a.src && a.paused;
+    });
+    if (stuck.length) {
+      pauseAllElements();
+      playing = false;
+      throw new Error("Track(s) did not start: " + stuck.join(", "));
+    }
     playing = true;
     paused = false;
     $("btnPlay").disabled = true;
@@ -596,14 +618,19 @@
       const finish = (fn, arg) => {
         if (settled) return;
         settled = true;
+        clearTimeout(timer);
         audio.removeEventListener("canplaythrough", onReady);
+        audio.removeEventListener("canplay", onCanPlay);
         audio.removeEventListener("loadedmetadata", onMeta);
         audio.removeEventListener("error", onErr);
         fn(arg);
       };
       const onReady = () => finish(resolve, "canplaythrough");
+      const onCanPlay = () => {
+        if (audio.readyState >= 2) finish(resolve, "canplay");
+      };
       const onMeta = () => {
-        if (audio.readyState >= 1) finish(resolve, "loadedmetadata");
+        // Don't resolve on metadata alone — iOS may report meta with no buffered audio yet.
       };
       const onErr = () => {
         const code = audio.error ? audio.error.code : "?";
@@ -611,12 +638,14 @@
       };
       if (audio.readyState >= 3) return finish(resolve, "ready");
       audio.addEventListener("canplaythrough", onReady);
+      audio.addEventListener("canplay", onCanPlay);
       audio.addEventListener("loadedmetadata", onMeta);
       audio.addEventListener("error", onErr);
       try { audio.load(); } catch (_) {}
-      setTimeout(() => {
-        if (audio.readyState >= 1) finish(resolve, "timeout-meta");
-        else finish(reject, new Error("Timed out loading " + trackLabel));
+      const timer = setTimeout(() => {
+        if (audio.readyState >= 2) finish(resolve, "timeout-canplay");
+        else if (audio.readyState >= 1) finish(resolve, "timeout-meta");
+        else finish(reject, new Error("Timed out loading " + trackLabel + " (readyState " + audio.readyState + ")"));
       }, 60000);
     });
   }
@@ -629,6 +658,10 @@
     a.playsInline = true;
     a.setAttribute("playsinline", "");
     a.setAttribute("webkit-playsinline", "");
+    // Keep element in the DOM — helps iOS Safari keep MediaElementSource alive.
+    a.controls = false;
+    a.style.cssText = "position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;left:-99px;top:-99px;";
+    document.body.appendChild(a);
     if (track === "full") {
       a.addEventListener("ended", onMasterEnded);
     }
@@ -670,18 +703,18 @@
         if (want.indexOf(track) < 0) continue;
         setStatus("Loading " + track + "…");
         const url = trackUrl(name, track, ext);
-        let ok = true;
         try {
           const head = await fetch(url, { method: "GET", headers: { Range: "bytes=0-1" } });
-          if (head.status === 404) {
-            ok = false;
-          } else if (!head.ok && head.status !== 206) {
+          if (head.status === 404) throw new Error("Missing " + track + " for " + label + " (404)");
+          if (!head.ok && head.status !== 206) {
             throw new Error("Failed to fetch " + track + ": HTTP " + head.status);
           }
+          // Drain tiny body so the connection can be reused on mobile.
+          try { await head.arrayBuffer(); } catch (_) {}
         } catch (err) {
-          if (err && /HTTP/.test(err.message)) throw err;
+          if (err && err.message) throw err;
+          throw new Error("Network error fetching " + track);
         }
-        if (!ok) throw new Error("Missing " + track + " for " + label);
         const a = ensureAudioElement(track);
         a.src = url;
         await waitForAudioReady(a, track);
@@ -692,6 +725,9 @@
       }
       if (!audioEls.full || !audioEls.full.src) throw new Error("Need full mix track.");
       if (!audioEls.vocals || !audioEls.vocals.src) throw new Error("Need vocals track.");
+      const fullDur = audioEls.full.duration;
+      const vocDur = audioEls.vocals.duration;
+      if (!(vocDur > 0) || isNaN(vocDur)) throw new Error("Vocals loaded but duration is invalid — try again.");
       TRACKS.forEach((s) => {
         if (audioEls[s] && audioEls[s].src) attachMediaSource(s);
       });
@@ -705,7 +741,11 @@
       $("btnSave").disabled = false;
       $("saveName").value = label.replace(/[^a-zA-Z0-9._-]+/g, "_") + "_live.wav";
       applyTrackGains();
-      setStatus("Loaded " + label + " — " + fmtTime(duration) + ". Play and tweak live.", "ok");
+      setStatus(
+        "Loaded " + label + " — full " + fmtTime(fullDur) + " + vocals " + fmtTime(vocDur) +
+        ". Play; Solo Vocals to confirm the stem (default −3 dB).",
+        "ok"
+      );
     } catch (err) {
       tracksReady = false;
       $("btnPlay").disabled = true;
@@ -1042,7 +1082,7 @@
       el.dispatchEvent(new Event("input"));
     };
     set("gain_full", 0);
-    set("gain_vocals", -9);
+    set("gain_vocals", -3);
     set("vocal_hp", 90);
     ["lows","low_mids","mids","presence","air"].forEach((b) => set("veq_" + b, 0));
     set("meq_lows", 0);
@@ -1055,7 +1095,7 @@
     set("rev_room", 0.86);
     set("rev_damp", 0.25);
     set("masterDb", -3);
-    setStatus("Bridge defaults applied (full 0, vocals -9, mix mids +4, master -3, reverb wet 0.42).", "ok");
+    setStatus("Bridge defaults applied (full 0, vocals -3, mix mids +4, master -3, reverb wet 0.42).", "ok");
   }
 
   $("btnPlay").addEventListener("click", () => {
