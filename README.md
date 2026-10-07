@@ -1,5 +1,5 @@
 # Chase Live Mixer
 
-Phone-friendly static live mixer (EQ, reverb, stem gains, mute/solo, offline Save download).
+Phone-friendly static live mixer: **full mix + vocals** (EQ, reverb, gains, mute/solo, Save download).
 
-Open `/` or `/index.html` on GitHub Pages.
+Open `/` or `/index.html` on GitHub Pages. Tap **Load**, then Play.

@@ -2,19 +2,19 @@
   {
     "id": "egil-final",
     "label": "Egil",
-    "stems": ["vocals", "other", "drums", "bass"],
+    "tracks": ["full", "vocals"],
     "ext": "mp3"
   },
   {
     "id": "market_spider",
     "label": "Market Spider",
-    "stems": ["vocals", "other", "drums", "bass"],
+    "tracks": ["full", "vocals"],
     "ext": "mp3"
   },
   {
     "id": "bridge",
     "label": "The Bridge will break",
-    "stems": ["vocals", "other", "drums", "bass"],
+    "tracks": ["full", "vocals"],
     "ext": "mp3"
   }
 ]

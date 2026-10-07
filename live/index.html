@@ -68,9 +68,9 @@
 </head>
 <body>
 <main>
-  <div class="nav">Chase live mixer · static · free hosting</div>
+  <div class="nav">Chase live mixer · full mix + vocals · free hosting</div>
   <h1>Live mix</h1>
-  <p class="lead">Hear EQ, reverb, and stem levels in real time. Set by ear, then Save to download on your phone.</p>
+  <p class="lead">Whole-mix EQ plus vocal stem (reverb / EQ / gain). Two synced tracks — no 4-stem drift. Tap Load, then Play.</p>
 
   <div class="transport">
     <label>Project
@@ -92,6 +92,18 @@
   </div>
 
   <div class="stem-grid">
+    <div class="stem" data-stem="full">
+      <h2>Full mix</h2>
+      <div class="stem-actions">
+        <button type="button" class="tiny mute-btn" data-stem="full">Mute</button>
+        <button type="button" class="tiny solo-btn" data-stem="full">Solo</button>
+      </div>
+      <label class="slider">gain dB
+        <input type="range" id="gain_full" min="-24" max="12" step="0.5" value="0">
+        <output>0</output>
+      </label>
+      <p class="hint">Complete song — Mix EQ applies here</p>
+    </div>
     <div class="stem" data-stem="vocals">
       <h2>Vocals</h2>
       <div class="stem-actions">
@@ -99,43 +111,10 @@
         <button type="button" class="tiny solo-btn" data-stem="vocals">Solo</button>
       </div>
       <label class="slider">gain dB
-        <input type="range" id="gain_vocals" min="-24" max="12" step="0.5" value="-8">
-        <output>-8</output>
+        <input type="range" id="gain_vocals" min="-24" max="12" step="0.5" value="-9">
+        <output>-9</output>
       </label>
-    </div>
-    <div class="stem" data-stem="other">
-      <h2>Guitars</h2>
-      <div class="stem-actions">
-        <button type="button" class="tiny mute-btn" data-stem="other">Mute</button>
-        <button type="button" class="tiny solo-btn" data-stem="other">Solo</button>
-      </div>
-      <label class="slider">gain dB
-        <input type="range" id="gain_other" min="-24" max="12" step="0.5" value="8">
-        <output>8</output>
-      </label>
-      <p class="hint">Demucs “other” = guitars / atmosphere</p>
-    </div>
-    <div class="stem" data-stem="drums">
-      <h2>Drums</h2>
-      <div class="stem-actions">
-        <button type="button" class="tiny mute-btn" data-stem="drums">Mute</button>
-        <button type="button" class="tiny solo-btn" data-stem="drums">Solo</button>
-      </div>
-      <label class="slider">gain dB
-        <input type="range" id="gain_drums" min="-24" max="12" step="0.5" value="1">
-        <output>1</output>
-      </label>
-    </div>
-    <div class="stem" data-stem="bass">
-      <h2>Bass</h2>
-      <div class="stem-actions">
-        <button type="button" class="tiny mute-btn" data-stem="bass">Mute</button>
-        <button type="button" class="tiny solo-btn" data-stem="bass">Solo</button>
-      </div>
-      <label class="slider">gain dB
-        <input type="range" id="gain_bass" min="-24" max="12" step="0.5" value="0">
-        <output>0</output>
-      </label>
+      <p class="hint">Demucs vocals layered on the full mix</p>
     </div>
   </div>
 
@@ -171,7 +150,7 @@
 
     <fieldset>
       <legend>Mix EQ</legend>
-      <p class="hint">Applied to guitars + drums + bass bus</p>
+      <p class="hint">Applied to the full mix bus</p>
       <label class="slider">lows
         <input type="range" id="meq_lows" min="-12" max="12" step="0.5" value="0">
         <output>0</output>
@@ -226,14 +205,15 @@
       <button type="button" class="primary" id="btnSave" disabled>Save mix</button>
       <button type="button" class="ghost" id="btnPreset">Bridge defaults</button>
     </div>
-    <p class="hint">Records the live mix (or offline-renders if needed), then downloads WAV — compressed encode when the phone supports it. No server needed.</p>
+    <p class="hint">Records the live master bus (or offline-renders both tracks), then downloads. No server needed.</p>
   </fieldset>
 
-  <div class="status" id="status">Pick a project and Load stems.</div>
+  <div class="status" id="status">Pick a project and tap Load.</div>
 </main>
 <script>
 (() => {
-  const STEMS = ["vocals", "other", "drums", "bass"];
+  const TRACKS = ["full", "vocals"];
+  const ASSET_BASE = "../";
   const EQ_SPECS = [
     { id: "lows", type: "lowshelf", freq: 90, Q: 0.707 },
     { id: "low_mids", type: "peaking", freq: 250, Q: 1.0 },
@@ -275,8 +255,8 @@
   let ctx = null;
   let audioEls = {};
   let mediaSources = {};
-  let buffers = { vocals: null, other: null, drums: null, bass: null };
-  let stemsReady = false;
+  let buffers = { full: null, vocals: null };
+  let tracksReady = false;
   let duration = 0;
   let project = null;
   let projectMeta = null;
@@ -289,7 +269,7 @@
   let saving = false;
   let recordDest = null;
 
-  let stemGains = {};
+  let trackGains = {};
   let vocalHP = null;
   let vocalEQ = {};
   let mixEQ = {};
@@ -299,28 +279,27 @@
   let vocalBus = null;
   let vocalComp = null;
   let vocalMakeup = null;
-  let instBus = null;
-  let mixBus = null;
+  let fullBus = null;
   let masterGain = null;
   let analyser = null;
-  let mute = { vocals: false, other: false, drums: false, bass: false };
-  let solo = { vocals: false, other: false, drums: false, bass: false };
+  let mute = { full: false, vocals: false };
+  let solo = { full: false, vocals: false };
 
   function anySolo() {
-    return STEMS.some((s) => solo[s]);
+    return TRACKS.some((s) => solo[s]);
   }
 
-  function effectiveGain(stem) {
-    const sliderDb = parseFloat($("gain_" + stem).value);
-    if (mute[stem]) return 0;
-    if (anySolo() && !solo[stem]) return 0;
+  function effectiveGain(track) {
+    const sliderDb = parseFloat($("gain_" + track).value);
+    if (mute[track]) return 0;
+    if (anySolo() && !solo[track]) return 0;
     return dbToLin(sliderDb);
   }
 
-  function applyStemGains() {
+  function applyTrackGains() {
     if (!ctx) return;
-    STEMS.forEach((s) => {
-      if (stemGains[s]) stemGains[s].gain.setValueAtTime(effectiveGain(s), ctx.currentTime);
+    TRACKS.forEach((s) => {
+      if (trackGains[s]) trackGains[s].gain.setValueAtTime(effectiveGain(s), ctx.currentTime);
     });
   }
 
@@ -381,9 +360,9 @@
   function ensureGraph() {
     if (ctx) return;
     ctx = new (window.AudioContext || window.webkitAudioContext)();
-    STEMS.forEach((s) => {
-      stemGains[s] = ctx.createGain();
-      stemGains[s].gain.value = effectiveGain(s);
+    TRACKS.forEach((s) => {
+      trackGains[s] = ctx.createGain();
+      trackGains[s].gain.value = effectiveGain(s);
     });
 
     vocalHP = ctx.createBiquadFilter();
@@ -411,15 +390,20 @@
     vocalComp.attack.value = 0.003;
     vocalComp.release.value = 0.25;
     vocalMakeup = ctx.createGain();
-    vocalMakeup.gain.value = Math.pow(10, 3 / 20); // +3 dB makeup after vocal peak tamer
-    instBus = ctx.createGain();
-    mixBus = ctx.createGain();
+    vocalMakeup.gain.value = Math.pow(10, 3 / 20);
+    fullBus = ctx.createGain();
     masterGain = ctx.createGain();
     masterGain.gain.value = dbToLin(parseFloat($("masterDb").value));
     analyser = ctx.createAnalyser();
     analyser.fftSize = 2048;
 
-    stemGains.vocals.connect(vocalHP);
+    // full → mixEQ → master
+    trackGains.full.connect(mixEQ.input);
+    mixEQ.output.connect(fullBus);
+    fullBus.connect(masterGain);
+
+    // vocals → HP → EQ → light peak tamer → dry/wet reverb → master
+    trackGains.vocals.connect(vocalHP);
     vocalHP.connect(vocalEQ.input);
     vocalEQ.output.connect(vocalComp);
     vocalComp.connect(vocalMakeup);
@@ -428,15 +412,8 @@
     convolver.connect(wetGain);
     dryGain.connect(vocalBus);
     wetGain.connect(vocalBus);
-    vocalBus.connect(mixBus);
+    vocalBus.connect(masterGain);
 
-    stemGains.other.connect(instBus);
-    stemGains.drums.connect(instBus);
-    stemGains.bass.connect(instBus);
-    instBus.connect(mixEQ.input);
-    mixEQ.output.connect(mixBus);
-
-    mixBus.connect(masterGain);
     masterGain.connect(analyser);
     analyser.connect(ctx.destination);
 
@@ -445,7 +422,7 @@
   }
 
   function pauseAllElements() {
-    STEMS.forEach((s) => {
+    TRACKS.forEach((s) => {
       const a = audioEls[s];
       if (a) {
         try { a.pause(); } catch (_) {}
@@ -454,14 +431,14 @@
   }
 
   function currentOffset() {
-    const a = audioEls.vocals;
+    const a = audioEls.full || audioEls.vocals;
     if (a && !isNaN(a.currentTime)) return Math.min(duration, a.currentTime);
     return pauseOffset;
   }
 
   function syncSeekAll(offset) {
     offset = Math.max(0, Math.min(offset, Math.max(0, duration - 0.01)));
-    STEMS.forEach((s) => {
+    TRACKS.forEach((s) => {
       const a = audioEls[s];
       if (!a) return;
       try { a.currentTime = offset; } catch (_) {}
@@ -472,11 +449,11 @@
 
   async function startFrom(offset) {
     ensureGraph();
-    if (!stemsReady) throw new Error("Load stems first.");
+    if (!tracksReady) throw new Error("Load tracks first.");
     offset = syncSeekAll(offset);
     if (ctx.state === "suspended") await ctx.resume();
     const plays = [];
-    STEMS.forEach((s) => {
+    TRACKS.forEach((s) => {
       const a = audioEls[s];
       if (!a || !a.src) return;
       plays.push(
@@ -509,13 +486,13 @@
     playing = false;
     paused = false;
     pauseOffset = 0;
-    STEMS.forEach((s) => {
+    TRACKS.forEach((s) => {
       const a = audioEls[s];
       if (a) {
         try { a.currentTime = 0; } catch (_) {}
       }
     });
-    $("btnPlay").disabled = !stemsReady;
+    $("btnPlay").disabled = !tracksReady;
     $("btnPause").disabled = true;
     $("btnStop").disabled = true;
     updateSeekUI(0);
@@ -528,7 +505,7 @@
     paused = false;
     pauseOffset = 0;
     pauseAllElements();
-    $("btnPlay").disabled = !stemsReady;
+    $("btnPlay").disabled = !tracksReady;
     $("btnPause").disabled = true;
     $("btnStop").disabled = true;
     updateSeekUI(0);
@@ -563,7 +540,7 @@
         if (!ctx) return;
         const id = el.id;
         const t = ctx.currentTime;
-        if (id.startsWith("gain_")) applyStemGains();
+        if (id.startsWith("gain_")) applyTrackGains();
         else if (id === "masterDb") masterGain.gain.setValueAtTime(dbToLin(parseFloat(el.value)), t);
         else if (id === "vocal_hp" && vocalHP) vocalHP.frequency.setValueAtTime(parseFloat(el.value), t);
         else if (id.startsWith("veq_") && vocalEQ[id.slice(4)]) vocalEQ[id.slice(4)].gain.setValueAtTime(parseFloat(el.value), t);
@@ -579,7 +556,7 @@
         const s = btn.dataset.stem;
         mute[s] = !mute[s];
         btn.classList.toggle("on", mute[s]);
-        applyStemGains();
+        applyTrackGains();
       });
     });
     document.querySelectorAll(".solo-btn").forEach((btn) => {
@@ -587,13 +564,13 @@
         const s = btn.dataset.stem;
         solo[s] = !solo[s];
         btn.classList.toggle("solo-on", solo[s]);
-        applyStemGains();
+        applyTrackGains();
       });
     });
   }
 
   async function loadProjects() {
-    const res = await fetch("../projects.json");
+    const res = await fetch(ASSET_BASE + "projects.json");
     if (!res.ok) throw new Error("projects.json HTTP " + res.status);
     projectsList = await res.json();
     const sel = $("project");
@@ -601,18 +578,19 @@
     projectsList.forEach((p) => {
       const opt = document.createElement("option");
       opt.value = p.id;
-      opt.textContent = p.label + " (" + (p.stems || []).join(", ") + ")";
+      const tracks = p.tracks || p.stems || TRACKS;
+      opt.textContent = p.label + " (" + tracks.join(" + ") + ")";
       if (p.id === "egil-final") opt.selected = true;
       sel.appendChild(opt);
     });
     if (!sel.value && projectsList[0]) sel.value = projectsList[0].id;
   }
 
-  function stemUrl(projId, stem, ext) {
-    return "../stems/" + encodeURIComponent(projId) + "/" + encodeURIComponent(stem) + "." + (ext || "mp3");
+  function trackUrl(projId, track, ext) {
+    return ASSET_BASE + "stems/" + encodeURIComponent(projId) + "/" + encodeURIComponent(track) + "." + (ext || "mp3");
   }
 
-  function waitForAudioReady(audio, stemLabel) {
+  function waitForAudioReady(audio, trackLabel) {
     return new Promise((resolve, reject) => {
       let settled = false;
       const finish = (fn, arg) => {
@@ -629,55 +607,54 @@
       };
       const onErr = () => {
         const code = audio.error ? audio.error.code : "?";
-        finish(reject, new Error("Audio error loading " + stemLabel + " (code " + code + ")"));
+        finish(reject, new Error("Audio error loading " + trackLabel + " (code " + code + ")"));
       };
       if (audio.readyState >= 3) return finish(resolve, "ready");
       audio.addEventListener("canplaythrough", onReady);
       audio.addEventListener("loadedmetadata", onMeta);
       audio.addEventListener("error", onErr);
-      // kick load if needed
       try { audio.load(); } catch (_) {}
-      // timeout so we never stick on Loading…
       setTimeout(() => {
         if (audio.readyState >= 1) finish(resolve, "timeout-meta");
-        else finish(reject, new Error("Timed out loading " + stemLabel));
+        else finish(reject, new Error("Timed out loading " + trackLabel));
       }, 60000);
     });
   }
 
-  function ensureAudioElement(stem) {
-    if (audioEls[stem]) return audioEls[stem];
+  function ensureAudioElement(track) {
+    if (audioEls[track]) return audioEls[track];
     const a = new Audio();
     a.crossOrigin = "anonymous";
     a.preload = "auto";
     a.playsInline = true;
     a.setAttribute("playsinline", "");
     a.setAttribute("webkit-playsinline", "");
-    if (stem === "vocals") {
+    if (track === "full") {
       a.addEventListener("ended", onMasterEnded);
     }
-    audioEls[stem] = a;
+    audioEls[track] = a;
     return a;
   }
 
-  function attachMediaSource(stem) {
-    if (mediaSources[stem]) return mediaSources[stem];
-    const a = audioEls[stem];
+  function attachMediaSource(track) {
+    if (mediaSources[track]) return mediaSources[track];
+    const a = audioEls[track];
     if (!a || !ctx) return null;
     const src = ctx.createMediaElementSource(a);
-    src.connect(stemGains[stem]);
-    mediaSources[stem] = src;
+    src.connect(trackGains[track]);
+    mediaSources[track] = src;
     return src;
   }
 
-  async function loadStems() {
+  async function loadTracks() {
     const name = $("project").value;
     if (!name) return;
-    projectMeta = projectsList.find((p) => p.id === name) || { id: name, label: name, stems: STEMS, ext: "mp3" };
+    projectMeta = projectsList.find((p) => p.id === name) || { id: name, label: name, tracks: TRACKS, ext: "mp3" };
     const label = projectMeta.label || name;
+    const want = projectMeta.tracks || projectMeta.stems || TRACKS;
     stopPlay();
-    stemsReady = false;
-    buffers = { vocals: null, other: null, drums: null, bass: null };
+    tracksReady = false;
+    buffers = { full: null, vocals: null };
     duration = 0;
     setStatus("Loading " + label + "…");
     $("btnLoad").disabled = true;
@@ -687,53 +664,39 @@
     if (ctx.state === "suspended") await ctx.resume();
 
     const ext = projectMeta.ext || "mp3";
-    const missing = [];
     try {
-      for (let i = 0; i < STEMS.length; i++) {
-        const stem = STEMS[i];
-        setStatus("Loading " + label + "… " + stem + " " + (i + 1) + "/4");
-        const url = stemUrl(name, stem, ext);
-        // Probe availability so we can soft-miss without hanging the element
+      for (let i = 0; i < TRACKS.length; i++) {
+        const track = TRACKS[i];
+        if (want.indexOf(track) < 0) continue;
+        setStatus("Loading " + track + "…");
+        const url = trackUrl(name, track, ext);
         let ok = true;
         try {
           const head = await fetch(url, { method: "GET", headers: { Range: "bytes=0-1" } });
           if (head.status === 404) {
-            missing.push(stem);
             ok = false;
           } else if (!head.ok && head.status !== 206) {
-            throw new Error("Failed to fetch " + stem + ": HTTP " + head.status);
+            throw new Error("Failed to fetch " + track + ": HTTP " + head.status);
           }
         } catch (err) {
           if (err && /HTTP/.test(err.message)) throw err;
-          // Some hosts reject Range; fall through to audio element
         }
-        if (!ok) {
-          // Keep a silent placeholder element so sync stays simple
-          const a = ensureAudioElement(stem);
-          a.removeAttribute("src");
-          a.src = "";
-          continue;
-        }
-        const a = ensureAudioElement(stem);
+        if (!ok) throw new Error("Missing " + track + " for " + label);
+        const a = ensureAudioElement(track);
         a.src = url;
-        await waitForAudioReady(a, stem);
-        attachMediaSource(stem);
+        await waitForAudioReady(a, track);
+        attachMediaSource(track);
         if (!isNaN(a.duration) && isFinite(a.duration)) {
           duration = Math.max(duration, a.duration);
         }
       }
-      if (!audioEls.vocals || !audioEls.vocals.src) {
-        throw new Error("Need vocals stem in this project.");
-      }
-      if (!audioEls.other || !audioEls.other.src) {
-        throw new Error("Need other (guitars) stem in this project.");
-      }
-      // Attach any remaining that have src (in case probe skipped)
-      STEMS.forEach((s) => {
+      if (!audioEls.full || !audioEls.full.src) throw new Error("Need full mix track.");
+      if (!audioEls.vocals || !audioEls.vocals.src) throw new Error("Need vocals track.");
+      TRACKS.forEach((s) => {
         if (audioEls[s] && audioEls[s].src) attachMediaSource(s);
       });
       project = name;
-      stemsReady = true;
+      tracksReady = true;
       $("seek").max = String(duration || 0);
       $("seek").value = "0";
       $("seek").disabled = false;
@@ -741,11 +704,10 @@
       $("btnPlay").disabled = false;
       $("btnSave").disabled = false;
       $("saveName").value = label.replace(/[^a-zA-Z0-9._-]+/g, "_") + "_live.wav";
-      applyStemGains();
-      const note = missing.length ? " (silent: " + missing.join(", ") + ")" : "";
-      setStatus("Loaded " + label + " — " + fmtTime(duration) + note + ". Play and tweak live.", "ok");
+      applyTrackGains();
+      setStatus("Loaded " + label + " — " + fmtTime(duration) + ". Play and tweak live.", "ok");
     } catch (err) {
-      stemsReady = false;
+      tracksReady = false;
       $("btnPlay").disabled = true;
       $("btnSave").disabled = true;
       setStatus("Load failed: " + (err && err.message ? err.message : err), "err");
@@ -790,45 +752,39 @@
     return new Blob([buf], { type: "audio/wav" });
   }
 
-  async function decodeStemsForSave() {
-    if (!project) throw new Error("Load stems first.");
+  async function decodeTracksForSave() {
+    if (!project) throw new Error("Load tracks first.");
     const ext = (projectMeta && projectMeta.ext) || "mp3";
-    const out = { vocals: null, other: null, drums: null, bass: null };
+    const out = { full: null, vocals: null };
     let maxDur = 0;
-    for (let i = 0; i < STEMS.length; i++) {
-      const stem = STEMS[i];
-      setStatus("Decoding for save… " + (i + 1) + "/4");
-      const url = stemUrl(project, stem, ext);
+    for (let i = 0; i < TRACKS.length; i++) {
+      const track = TRACKS[i];
+      setStatus("Decoding for save… " + track);
+      const url = trackUrl(project, track, ext);
       const res = await fetch(url);
-      if (res.status === 404) continue;
-      if (!res.ok) throw new Error("Failed to fetch " + stem + ": " + res.status);
+      if (!res.ok) throw new Error("Failed to fetch " + track + ": " + res.status);
       const ab = await res.arrayBuffer();
       const buf = await ctx.decodeAudioData(ab.slice(0));
-      out[stem] = buf;
+      out[track] = buf;
       maxDur = Math.max(maxDur, buf.duration);
     }
-    if (!out.vocals || !out.other) throw new Error("Need vocals and other stems to save.");
-    STEMS.forEach((s) => {
-      if (!out[s]) {
-        out[s] = ctx.createBuffer(2, Math.max(1, Math.floor(maxDur * ctx.sampleRate)), ctx.sampleRate);
-      }
-    });
+    if (!out.full || !out.vocals) throw new Error("Need full and vocals to save.");
     buffers = out;
     return out;
   }
 
   async function offlineRender(bufs) {
     const use = bufs || buffers;
-    if (!use.vocals) throw new Error("Load stems first.");
-    const sr = use.vocals.sampleRate;
-    const len = Math.max(...STEMS.map((s) => use[s] ? use[s].length : 0));
+    if (!use.full || !use.vocals) throw new Error("Load tracks first.");
+    const sr = use.full.sampleRate;
+    const len = Math.max(use.full.length, use.vocals.length);
     const tail = Math.floor(sr * 3.5);
     const offline = new OfflineAudioContext(2, len + tail, sr);
 
-    const sG = {};
-    STEMS.forEach((s) => {
-      sG[s] = offline.createGain();
-      sG[s].gain.value = effectiveGain(s);
+    const tG = {};
+    TRACKS.forEach((s) => {
+      tG[s] = offline.createGain();
+      tG[s].gain.value = effectiveGain(s);
     });
 
     const hp = offline.createBiquadFilter();
@@ -870,12 +826,14 @@
     vComp.attack.value = 0.003;
     vComp.release.value = 0.25;
     const vMakeup = offline.createGain();
-    vMakeup.gain.value = Math.pow(10, 3 / 20); // +3 dB makeup after vocal peak tamer
-    const iBus = offline.createGain();
+    vMakeup.gain.value = Math.pow(10, 3 / 20);
     const master = offline.createGain();
     master.gain.value = dbToLin(parseFloat($("masterDb").value));
 
-    sG.vocals.connect(hp);
+    tG.full.connect(mEQ.input);
+    mEQ.output.connect(master);
+
+    tG.vocals.connect(hp);
     hp.connect(vEQ.input);
     vEQ.output.connect(vComp);
     vComp.connect(vMakeup);
@@ -885,19 +843,13 @@
     dry.connect(vBus);
     wet.connect(vBus);
     vBus.connect(master);
-
-    sG.other.connect(iBus);
-    sG.drums.connect(iBus);
-    sG.bass.connect(iBus);
-    iBus.connect(mEQ.input);
-    mEQ.output.connect(master);
     master.connect(offline.destination);
 
-    STEMS.forEach((s) => {
+    TRACKS.forEach((s) => {
       if (!use[s]) return;
       const src = offline.createBufferSource();
       src.buffer = use[s];
-      src.connect(sG[s]);
+      src.connect(tG[s]);
       src.start(0);
     });
 
@@ -928,7 +880,6 @@
       rec.onerror = () => reject(new Error("MediaRecorder failed"));
       rec.onstop = () => resolve(new Blob(chunks, { type: mime }));
     });
-    // Play from start while recording (user hears via destination)
     pauseAllElements();
     syncSeekAll(0);
     if (ctx.state === "suspended") await ctx.resume();
@@ -940,15 +891,14 @@
     $("btnPause").disabled = true;
     $("btnStop").disabled = true;
     const plays = [];
-    STEMS.forEach((s) => {
+    TRACKS.forEach((s) => {
       const a = audioEls[s];
       if (!a || !a.src) return;
       plays.push(a.play());
     });
     await Promise.all(plays);
-    // Wait until vocals end (or duration)
     await new Promise((resolve) => {
-      const a = audioEls.vocals;
+      const a = audioEls.full || audioEls.vocals;
       const onEnd = () => { cleanup(); resolve(); };
       const cleanup = () => {
         if (a) a.removeEventListener("ended", onEnd);
@@ -962,7 +912,6 @@
           resolve();
         }
       }, 200);
-      // hard cap: duration + 2s
       setTimeout(() => { cleanup(); resolve(); }, Math.max(5000, (duration + 2) * 1000));
     });
     pauseAllElements();
@@ -1016,8 +965,8 @@
   }
 
   async function saveMix() {
-    if (!stemsReady) {
-      setStatus("Load stems first.", "err");
+    if (!tracksReady) {
+      setStatus("Load tracks first.", "err");
       return;
     }
     $("btnSave").disabled = true;
@@ -1043,9 +992,8 @@
           const buf = await blobToAudioBuffer(recBlob);
           wavBlob = encodeWav(buf);
         } catch (e) {
-          // Fall through to offline decode if recorded blob won't decode
           setStatus("Recording decode failed; falling back to offline render…");
-          const bufs = await decodeStemsForSave();
+          const bufs = await decodeTracksForSave();
           const rendered = await offlineRender(bufs);
           wavBlob = encodeWav(rendered);
           if ($("saveMp3").checked && !compressed) {
@@ -1053,8 +1001,8 @@
           }
         }
       } else {
-        setStatus("MediaRecorder unavailable — decoding stems for offline save…");
-        const bufs = await decodeStemsForSave();
+        setStatus("MediaRecorder unavailable — decoding tracks for offline save…");
+        const bufs = await decodeTracksForSave();
         setStatus("Rendering offline bounce…");
         const rendered = await offlineRender(bufs);
         wavBlob = encodeWav(rendered);
@@ -1078,8 +1026,8 @@
       setStatus("Save failed: " + (err && err.message ? err.message : err), "err");
     } finally {
       saving = false;
-      $("btnSave").disabled = !stemsReady;
-      $("btnPlay").disabled = !stemsReady;
+      $("btnSave").disabled = !tracksReady;
+      $("btnPlay").disabled = !tracksReady;
       $("btnPause").disabled = true;
       $("btnStop").disabled = true;
     }
@@ -1093,10 +1041,8 @@
       syncOutput(el);
       el.dispatchEvent(new Event("input"));
     };
-    set("gain_vocals", -8);
-    set("gain_other", 8);
-    set("gain_drums", 1);
-    set("gain_bass", 0);
+    set("gain_full", 0);
+    set("gain_vocals", -9);
     set("vocal_hp", 90);
     ["lows","low_mids","mids","presence","air"].forEach((b) => set("veq_" + b, 0));
     set("meq_lows", 0);
@@ -1109,20 +1055,20 @@
     set("rev_room", 0.86);
     set("rev_damp", 0.25);
     set("masterDb", -3);
-    setStatus("Bridge defaults applied (vocals -8, guitars +8, drums +1, mix mids +4, master -3, reverb wet 0.42).", "ok");
+    setStatus("Bridge defaults applied (full 0, vocals -9, mix mids +4, master -3, reverb wet 0.42).", "ok");
   }
 
   $("btnPlay").addEventListener("click", () => {
     startFrom(paused ? pauseOffset : currentOffset()).catch((err) => {
       setStatus("Play failed: " + (err && err.message ? err.message : err), "err");
       playing = false;
-      $("btnPlay").disabled = !stemsReady;
+      $("btnPlay").disabled = !tracksReady;
       $("btnPause").disabled = true;
     });
   });
   $("btnPause").addEventListener("click", pausePlay);
   $("btnStop").addEventListener("click", stopPlay);
-  $("btnLoad").addEventListener("click", loadStems);
+  $("btnLoad").addEventListener("click", loadTracks);
   $("btnSave").addEventListener("click", saveMix);
   $("btnPreset").addEventListener("click", applyPreset);
 
