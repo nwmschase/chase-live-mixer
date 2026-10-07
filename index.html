@@ -226,7 +226,7 @@
       <button type="button" class="primary" id="btnSave" disabled>Save mix</button>
       <button type="button" class="ghost" id="btnPreset">Bridge defaults</button>
     </div>
-    <p class="hint">Renders current slider state offline in the browser, then downloads WAV (and MP3 if the phone supports encoding) — no server needed.</p>
+    <p class="hint">Records the live mix (or offline-renders if needed), then downloads WAV — compressed encode when the phone supports it. No server needed.</p>
   </fieldset>
 
   <div class="status" id="status">Pick a project and Load stems.</div>
@@ -273,18 +273,21 @@
   }
 
   let ctx = null;
+  let audioEls = {};
+  let mediaSources = {};
   let buffers = { vocals: null, other: null, drums: null, bass: null };
+  let stemsReady = false;
   let duration = 0;
   let project = null;
   let projectMeta = null;
-  let sources = {};
   let playing = false;
   let paused = false;
-  let startCtxTime = 0;
   let pauseOffset = 0;
   let seekDragging = false;
   let meterRaf = 0;
   let projectsList = [];
+  let saving = false;
+  let recordDest = null;
 
   let stemGains = {};
   let vocalHP = null;
@@ -424,62 +427,65 @@
     mixBus.connect(masterGain);
     masterGain.connect(analyser);
     analyser.connect(ctx.destination);
+
+    recordDest = ctx.createMediaStreamDestination();
+    analyser.connect(recordDest);
   }
 
-  function stopSources() {
+  function pauseAllElements() {
     STEMS.forEach((s) => {
-      if (sources[s]) {
-        try { sources[s].onended = null; sources[s].stop(); } catch (_) {}
-        try { sources[s].disconnect(); } catch (_) {}
-        sources[s] = null;
+      const a = audioEls[s];
+      if (a) {
+        try { a.pause(); } catch (_) {}
       }
     });
   }
 
   function currentOffset() {
-    if (!playing) return pauseOffset;
-    return Math.min(duration, pauseOffset + (ctx.currentTime - startCtxTime));
+    const a = audioEls.vocals;
+    if (a && !isNaN(a.currentTime)) return Math.min(duration, a.currentTime);
+    return pauseOffset;
   }
 
-  function startFrom(offset) {
-    ensureGraph();
-    stopSources();
+  function syncSeekAll(offset) {
     offset = Math.max(0, Math.min(offset, Math.max(0, duration - 0.01)));
-    pauseOffset = offset;
-    let endedCount = 0;
     STEMS.forEach((s) => {
-      if (!buffers[s]) return;
-      const src = ctx.createBufferSource();
-      src.buffer = buffers[s];
-      src.connect(stemGains[s]);
-      src.onended = () => {
-        endedCount += 1;
-        if (endedCount >= STEMS.filter((x) => buffers[x]).length && playing) {
-          playing = false;
-          paused = false;
-          pauseOffset = 0;
-          $("btnPlay").disabled = false;
-          $("btnPause").disabled = true;
-          updateSeekUI(0);
-        }
-      };
-      src.start(0, offset);
-      sources[s] = src;
+      const a = audioEls[s];
+      if (!a) return;
+      try { a.currentTime = offset; } catch (_) {}
     });
-    startCtxTime = ctx.currentTime;
+    pauseOffset = offset;
+    return offset;
+  }
+
+  async function startFrom(offset) {
+    ensureGraph();
+    if (!stemsReady) throw new Error("Load stems first.");
+    offset = syncSeekAll(offset);
+    if (ctx.state === "suspended") await ctx.resume();
+    const plays = [];
+    STEMS.forEach((s) => {
+      const a = audioEls[s];
+      if (!a || !a.src) return;
+      plays.push(
+        a.play().catch((err) => {
+          throw new Error("Play failed (" + s + "): " + (err && err.message ? err.message : err));
+        })
+      );
+    });
+    await Promise.all(plays);
     playing = true;
     paused = false;
     $("btnPlay").disabled = true;
     $("btnPause").disabled = false;
     $("btnStop").disabled = false;
-    if (ctx.state === "suspended") ctx.resume();
     tickMeter();
   }
 
   function pausePlay() {
     if (!playing) return;
     pauseOffset = currentOffset();
-    stopSources();
+    pauseAllElements();
     playing = false;
     paused = true;
     $("btnPlay").disabled = false;
@@ -487,11 +493,30 @@
   }
 
   function stopPlay() {
-    stopSources();
+    pauseAllElements();
     playing = false;
     paused = false;
     pauseOffset = 0;
-    $("btnPlay").disabled = !buffers.vocals;
+    STEMS.forEach((s) => {
+      const a = audioEls[s];
+      if (a) {
+        try { a.currentTime = 0; } catch (_) {}
+      }
+    });
+    $("btnPlay").disabled = !stemsReady;
+    $("btnPause").disabled = true;
+    $("btnStop").disabled = true;
+    updateSeekUI(0);
+  }
+
+  function onMasterEnded() {
+    if (saving) return;
+    if (!playing) return;
+    playing = false;
+    paused = false;
+    pauseOffset = 0;
+    pauseAllElements();
+    $("btnPlay").disabled = !stemsReady;
     $("btnPause").disabled = true;
     $("btnStop").disabled = true;
     updateSeekUI(0);
@@ -575,61 +600,143 @@
     return "stems/" + encodeURIComponent(projId) + "/" + encodeURIComponent(stem) + "." + (ext || "mp3");
   }
 
+  function waitForAudioReady(audio, stemLabel) {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (fn, arg) => {
+        if (settled) return;
+        settled = true;
+        audio.removeEventListener("canplaythrough", onReady);
+        audio.removeEventListener("loadedmetadata", onMeta);
+        audio.removeEventListener("error", onErr);
+        fn(arg);
+      };
+      const onReady = () => finish(resolve, "canplaythrough");
+      const onMeta = () => {
+        if (audio.readyState >= 1) finish(resolve, "loadedmetadata");
+      };
+      const onErr = () => {
+        const code = audio.error ? audio.error.code : "?";
+        finish(reject, new Error("Audio error loading " + stemLabel + " (code " + code + ")"));
+      };
+      if (audio.readyState >= 3) return finish(resolve, "ready");
+      audio.addEventListener("canplaythrough", onReady);
+      audio.addEventListener("loadedmetadata", onMeta);
+      audio.addEventListener("error", onErr);
+      // kick load if needed
+      try { audio.load(); } catch (_) {}
+      // timeout so we never stick on Loading…
+      setTimeout(() => {
+        if (audio.readyState >= 1) finish(resolve, "timeout-meta");
+        else finish(reject, new Error("Timed out loading " + stemLabel));
+      }, 60000);
+    });
+  }
+
+  function ensureAudioElement(stem) {
+    if (audioEls[stem]) return audioEls[stem];
+    const a = new Audio();
+    a.crossOrigin = "anonymous";
+    a.preload = "auto";
+    a.playsInline = true;
+    a.setAttribute("playsinline", "");
+    a.setAttribute("webkit-playsinline", "");
+    if (stem === "vocals") {
+      a.addEventListener("ended", onMasterEnded);
+    }
+    audioEls[stem] = a;
+    return a;
+  }
+
+  function attachMediaSource(stem) {
+    if (mediaSources[stem]) return mediaSources[stem];
+    const a = audioEls[stem];
+    if (!a || !ctx) return null;
+    const src = ctx.createMediaElementSource(a);
+    src.connect(stemGains[stem]);
+    mediaSources[stem] = src;
+    return src;
+  }
+
   async function loadStems() {
     const name = $("project").value;
     if (!name) return;
     projectMeta = projectsList.find((p) => p.id === name) || { id: name, label: name, stems: STEMS, ext: "mp3" };
+    const label = projectMeta.label || name;
     stopPlay();
-    setStatus("Loading stems for " + (projectMeta.label || name) + "… (compressed audio)");
+    stemsReady = false;
+    buffers = { vocals: null, other: null, drums: null, bass: null };
+    duration = 0;
+    setStatus("Loading " + label + "…");
     $("btnLoad").disabled = true;
     $("btnPlay").disabled = true;
     $("btnSave").disabled = true;
     ensureGraph();
     if (ctx.state === "suspended") await ctx.resume();
 
-    buffers = { vocals: null, other: null, drums: null, bass: null };
-    duration = 0;
     const ext = projectMeta.ext || "mp3";
+    const missing = [];
     try {
-      const loads = STEMS.map(async (stem) => {
+      for (let i = 0; i < STEMS.length; i++) {
+        const stem = STEMS[i];
+        setStatus("Loading " + label + "… " + stem + " " + (i + 1) + "/4");
         const url = stemUrl(name, stem, ext);
-        const res = await fetch(url);
-        if (res.status === 404) return { stem, buf: null, missing: true };
-        if (!res.ok) throw new Error("Failed to fetch " + stem + ": " + res.status);
-        const ab = await res.arrayBuffer();
-        const buf = await ctx.decodeAudioData(ab.slice(0));
-        return { stem, buf, missing: false };
-      });
-      const results = await Promise.all(loads);
-      const missing = [];
-      results.forEach((r) => {
-        if (r.missing || !r.buf) missing.push(r.stem);
-        else {
-          buffers[r.stem] = r.buf;
-          duration = Math.max(duration, r.buf.duration);
+        // Probe availability so we can soft-miss without hanging the element
+        let ok = true;
+        try {
+          const head = await fetch(url, { method: "GET", headers: { Range: "bytes=0-1" } });
+          if (head.status === 404) {
+            missing.push(stem);
+            ok = false;
+          } else if (!head.ok && head.status !== 206) {
+            throw new Error("Failed to fetch " + stem + ": HTTP " + head.status);
+          }
+        } catch (err) {
+          if (err && /HTTP/.test(err.message)) throw err;
+          // Some hosts reject Range; fall through to audio element
         }
-      });
-      if (!buffers.vocals || !buffers.other) {
-        throw new Error("Need vocals and other stems in this project.");
+        if (!ok) {
+          // Keep a silent placeholder element so sync stays simple
+          const a = ensureAudioElement(stem);
+          a.removeAttribute("src");
+          a.src = "";
+          continue;
+        }
+        const a = ensureAudioElement(stem);
+        a.src = url;
+        await waitForAudioReady(a, stem);
+        attachMediaSource(stem);
+        if (!isNaN(a.duration) && isFinite(a.duration)) {
+          duration = Math.max(duration, a.duration);
+        }
       }
+      if (!audioEls.vocals || !audioEls.vocals.src) {
+        throw new Error("Need vocals stem in this project.");
+      }
+      if (!audioEls.other || !audioEls.other.src) {
+        throw new Error("Need other (guitars) stem in this project.");
+      }
+      // Attach any remaining that have src (in case probe skipped)
       STEMS.forEach((s) => {
-        if (!buffers[s]) {
-          buffers[s] = ctx.createBuffer(2, Math.max(1, Math.floor(duration * ctx.sampleRate)), ctx.sampleRate);
-        }
+        if (audioEls[s] && audioEls[s].src) attachMediaSource(s);
       });
       project = name;
-      $("seek").max = String(duration);
+      stemsReady = true;
+      $("seek").max = String(duration || 0);
       $("seek").value = "0";
       $("seek").disabled = false;
       updateSeekUI(0);
       $("btnPlay").disabled = false;
       $("btnSave").disabled = false;
-      $("saveName").value = (projectMeta.label || name).replace(/[^a-zA-Z0-9._-]+/g, "_") + "_live.wav";
+      $("saveName").value = label.replace(/[^a-zA-Z0-9._-]+/g, "_") + "_live.wav";
       applyStemGains();
       const note = missing.length ? " (silent: " + missing.join(", ") + ")" : "";
-      setStatus("Loaded " + (projectMeta.label || name) + " — " + fmtTime(duration) + note + ". Play and tweak live.", "ok");
+      setStatus("Loaded " + label + " — " + fmtTime(duration) + note + ". Play and tweak live.", "ok");
     } catch (err) {
-      setStatus("Load failed: " + err.message, "err");
+      stemsReady = false;
+      $("btnPlay").disabled = true;
+      $("btnSave").disabled = true;
+      setStatus("Load failed: " + (err && err.message ? err.message : err), "err");
     } finally {
       $("btnLoad").disabled = false;
     }
@@ -671,10 +778,38 @@
     return new Blob([buf], { type: "audio/wav" });
   }
 
-  async function offlineRender() {
-    if (!buffers.vocals) throw new Error("Load stems first.");
-    const sr = buffers.vocals.sampleRate;
-    const len = Math.max(...STEMS.map((s) => buffers[s] ? buffers[s].length : 0));
+  async function decodeStemsForSave() {
+    if (!project) throw new Error("Load stems first.");
+    const ext = (projectMeta && projectMeta.ext) || "mp3";
+    const out = { vocals: null, other: null, drums: null, bass: null };
+    let maxDur = 0;
+    for (let i = 0; i < STEMS.length; i++) {
+      const stem = STEMS[i];
+      setStatus("Decoding for save… " + (i + 1) + "/4");
+      const url = stemUrl(project, stem, ext);
+      const res = await fetch(url);
+      if (res.status === 404) continue;
+      if (!res.ok) throw new Error("Failed to fetch " + stem + ": " + res.status);
+      const ab = await res.arrayBuffer();
+      const buf = await ctx.decodeAudioData(ab.slice(0));
+      out[stem] = buf;
+      maxDur = Math.max(maxDur, buf.duration);
+    }
+    if (!out.vocals || !out.other) throw new Error("Need vocals and other stems to save.");
+    STEMS.forEach((s) => {
+      if (!out[s]) {
+        out[s] = ctx.createBuffer(2, Math.max(1, Math.floor(maxDur * ctx.sampleRate)), ctx.sampleRate);
+      }
+    });
+    buffers = out;
+    return out;
+  }
+
+  async function offlineRender(bufs) {
+    const use = bufs || buffers;
+    if (!use.vocals) throw new Error("Load stems first.");
+    const sr = use.vocals.sampleRate;
+    const len = Math.max(...STEMS.map((s) => use[s] ? use[s].length : 0));
     const tail = Math.floor(sr * 3.5);
     const offline = new OfflineAudioContext(2, len + tail, sr);
 
@@ -737,9 +872,9 @@
     master.connect(offline.destination);
 
     STEMS.forEach((s) => {
-      if (!buffers[s]) return;
+      if (!use[s]) return;
       const src = offline.createBufferSource();
-      src.buffer = buffers[s];
+      src.buffer = use[s];
       src.connect(sG[s]);
       src.start(0);
     });
@@ -747,9 +882,7 @@
     return offline.startRendering();
   }
 
-  async function encodeMp3IfPossible(audioBuffer) {
-    // Prefer MediaRecorder on a short offline playback graph when available (aac/mp4 or webm/opus).
-    // True mp3 encoding is rare in browsers; we fall back to WAV always.
+  function pickRecorderMime() {
     if (typeof MediaRecorder === "undefined") return null;
     const mimeCandidates = [
       "audio/mp4",
@@ -757,7 +890,78 @@
       "audio/webm;codecs=opus",
       "audio/webm",
     ];
-    const mime = mimeCandidates.find((m) => MediaRecorder.isTypeSupported(m));
+    return mimeCandidates.find((m) => MediaRecorder.isTypeSupported(m)) || null;
+  }
+
+  async function recordLiveMix(mime) {
+    ensureGraph();
+    if (!recordDest) {
+      recordDest = ctx.createMediaStreamDestination();
+      analyser.connect(recordDest);
+    }
+    const rec = new MediaRecorder(recordDest.stream, { mimeType: mime, audioBitsPerSecond: 192000 });
+    const chunks = [];
+    const done = new Promise((resolve, reject) => {
+      rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+      rec.onerror = () => reject(new Error("MediaRecorder failed"));
+      rec.onstop = () => resolve(new Blob(chunks, { type: mime }));
+    });
+    // Play from start while recording (user hears via destination)
+    pauseAllElements();
+    syncSeekAll(0);
+    if (ctx.state === "suspended") await ctx.resume();
+    rec.start(250);
+    playing = true;
+    paused = false;
+    saving = true;
+    $("btnPlay").disabled = true;
+    $("btnPause").disabled = true;
+    $("btnStop").disabled = true;
+    const plays = [];
+    STEMS.forEach((s) => {
+      const a = audioEls[s];
+      if (!a || !a.src) return;
+      plays.push(a.play());
+    });
+    await Promise.all(plays);
+    // Wait until vocals end (or duration)
+    await new Promise((resolve) => {
+      const a = audioEls.vocals;
+      const onEnd = () => { cleanup(); resolve(); };
+      const cleanup = () => {
+        if (a) a.removeEventListener("ended", onEnd);
+        clearInterval(iv);
+      };
+      if (a) a.addEventListener("ended", onEnd);
+      const iv = setInterval(() => {
+        if (!a) return;
+        if (a.ended || (duration > 0 && a.currentTime >= duration - 0.05)) {
+          cleanup();
+          resolve();
+        }
+      }, 200);
+      // hard cap: duration + 2s
+      setTimeout(() => { cleanup(); resolve(); }, Math.max(5000, (duration + 2) * 1000));
+    });
+    pauseAllElements();
+    await new Promise((r) => setTimeout(r, 300));
+    rec.stop();
+    const blob = await done;
+    playing = false;
+    paused = false;
+    pauseOffset = 0;
+    saving = false;
+    updateSeekUI(0);
+    return blob;
+  }
+
+  async function blobToAudioBuffer(blob) {
+    const ab = await blob.arrayBuffer();
+    return ctx.decodeAudioData(ab.slice(0));
+  }
+
+  async function encodeCompressedFromBuffer(audioBuffer) {
+    const mime = pickRecorderMime();
     if (!mime) return null;
     try {
       const sr = audioBuffer.sampleRate;
@@ -776,14 +980,13 @@
       rec.start(250);
       src.start(0);
       await new Promise((r) => { src.onended = r; });
-      // small pad for encoder flush
       await new Promise((r) => setTimeout(r, 200));
       rec.stop();
       const blob = await done;
       await ac.close();
       let ext = "webm";
-      if (mime.includes("mp4") || mime.includes("mpeg")) ext = "m4a";
-      else if (mime.includes("mpeg") && !mime.includes("mp4")) ext = "mp3";
+      if (mime.includes("mp4")) ext = "m4a";
+      else if (mime.includes("mpeg")) ext = "mp3";
       return { blob, ext, mime };
     } catch (_) {
       return null;
@@ -791,30 +994,72 @@
   }
 
   async function saveMix() {
+    if (!stemsReady) {
+      setStatus("Load stems first.", "err");
+      return;
+    }
     $("btnSave").disabled = true;
-    setStatus("Rendering offline bounce…");
+    saving = true;
     try {
-      const rendered = await offlineRender();
-      setStatus("Encoding + downloading…");
       const wavName = ($("saveName").value || "live_mix.wav").trim();
       const base = wavName.replace(/\.wav$/i, "") || "live_mix";
-      const wavBlob = encodeWav(rendered);
+      const mime = pickRecorderMime();
+      let wavBlob = null;
+      let compressed = null;
+
+      if (mime) {
+        setStatus("Recording live mix… play through once (you will hear it).");
+        const recBlob = await recordLiveMix(mime);
+        if ($("saveMp3").checked && recBlob && recBlob.size > 1000) {
+          let ext = "webm";
+          if (mime.includes("mp4")) ext = "m4a";
+          else if (mime.includes("mpeg")) ext = "mp3";
+          compressed = { blob: recBlob, ext, mime };
+        }
+        setStatus("Encoding WAV from recording…");
+        try {
+          const buf = await blobToAudioBuffer(recBlob);
+          wavBlob = encodeWav(buf);
+        } catch (e) {
+          // Fall through to offline decode if recorded blob won't decode
+          setStatus("Recording decode failed; falling back to offline render…");
+          const bufs = await decodeStemsForSave();
+          const rendered = await offlineRender(bufs);
+          wavBlob = encodeWav(rendered);
+          if ($("saveMp3").checked && !compressed) {
+            compressed = await encodeCompressedFromBuffer(rendered);
+          }
+        }
+      } else {
+        setStatus("MediaRecorder unavailable — decoding stems for offline save…");
+        const bufs = await decodeStemsForSave();
+        setStatus("Rendering offline bounce…");
+        const rendered = await offlineRender(bufs);
+        wavBlob = encodeWav(rendered);
+        if ($("saveMp3").checked) {
+          compressed = await encodeCompressedFromBuffer(rendered);
+        }
+      }
+
       downloadBlob(wavBlob, base + ".wav");
       let msg = "Downloaded " + base + ".wav (" + Math.round(wavBlob.size / 1048576) + " MB)";
       if ($("saveMp3").checked) {
-        const enc = await encodeMp3IfPossible(rendered);
-        if (enc && enc.blob && enc.blob.size > 1000) {
-          downloadBlob(enc.blob, base + "." + enc.ext);
-          msg += "\nAlso downloaded " + base + "." + enc.ext + " (" + enc.mime + ")";
+        if (compressed && compressed.blob && compressed.blob.size > 1000) {
+          downloadBlob(compressed.blob, base + "." + compressed.ext);
+          msg += "\nAlso downloaded " + base + "." + compressed.ext + " (" + compressed.mime + ")";
         } else {
           msg += "\nCompressed encode not available on this phone — WAV downloaded.";
         }
       }
       setStatus(msg, "ok");
     } catch (err) {
-      setStatus("Save failed: " + err.message, "err");
+      setStatus("Save failed: " + (err && err.message ? err.message : err), "err");
     } finally {
-      $("btnSave").disabled = !buffers.vocals;
+      saving = false;
+      $("btnSave").disabled = !stemsReady;
+      $("btnPlay").disabled = !stemsReady;
+      $("btnPause").disabled = true;
+      $("btnStop").disabled = true;
     }
   }
 
@@ -846,8 +1091,12 @@
   }
 
   $("btnPlay").addEventListener("click", () => {
-    ensureGraph();
-    startFrom(paused ? pauseOffset : currentOffset());
+    startFrom(paused ? pauseOffset : currentOffset()).catch((err) => {
+      setStatus("Play failed: " + (err && err.message ? err.message : err), "err");
+      playing = false;
+      $("btnPlay").disabled = !stemsReady;
+      $("btnPause").disabled = true;
+    });
   });
   $("btnPause").addEventListener("click", pausePlay);
   $("btnStop").addEventListener("click", stopPlay);
@@ -864,17 +1113,19 @@
     if (!seekDragging) return;
     seekDragging = false;
     const pos = parseFloat($("seek").value);
-    if (playing) startFrom(pos);
-    else { pauseOffset = pos; updateSeekUI(pos); }
+    if (playing) {
+      startFrom(pos).catch((err) => setStatus("Seek failed: " + err.message, "err"));
+    } else {
+      syncSeekAll(pos);
+      updateSeekUI(pos);
+    }
   };
   $("seek").addEventListener("mouseup", endSeek);
   $("seek").addEventListener("touchend", endSeek);
 
   wireLiveParams();
   tickMeter();
-  loadProjects().then(() => {
-    if ($("project").value) loadStems();
-  }).catch((e) => setStatus("Could not list projects: " + e.message, "err"));
+  loadProjects().catch((e) => setStatus("Could not list projects: " + e.message, "err"));
 })();
 </script>
 </body>
