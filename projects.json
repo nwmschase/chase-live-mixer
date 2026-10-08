@@ -2,19 +2,31 @@
   {
     "id": "egil-final",
     "label": "Egil",
-    "tracks": ["full", "vocals"],
-    "ext": "mp3"
+    "tracks": [
+      "full",
+      "vocals"
+    ],
+    "ext": "mp3",
+    "inst": "inst"
   },
   {
     "id": "market_spider",
     "label": "Market Spider",
-    "tracks": ["full", "vocals"],
-    "ext": "mp3"
+    "tracks": [
+      "full",
+      "vocals"
+    ],
+    "ext": "mp3",
+    "inst": "inst"
   },
   {
     "id": "bridge",
     "label": "The Bridge will break",
-    "tracks": ["full", "vocals"],
-    "ext": "mp3"
+    "tracks": [
+      "full",
+      "vocals"
+    ],
+    "ext": "mp3",
+    "inst": "inst"
   }
 ]

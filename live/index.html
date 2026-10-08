@@ -23,22 +23,23 @@
   }
   .transport button, button.primary, button.ghost, button.tiny {
     background: #8d1d1d; color: #fff; border: 0; border-radius: 8px; padding: 10px 16px;
-    font-size: 0.95rem; cursor: pointer;
+    font-size: 0.95rem; cursor: pointer; min-height: 44px;
   }
   button.ghost { background: #2a3038; }
-  button.tiny { padding: 4px 10px; font-size: 0.78rem; border-radius: 6px; background: #2a3038; }
+  button.tiny { padding: 6px 14px; font-size: 0.85rem; border-radius: 8px; background: #2a3038; min-height: 40px; }
   button.tiny.on { background: #8d1d1d; }
   button.tiny.solo-on { background: #6b4a12; }
   button:disabled { opacity: 0.45; cursor: default; }
   button.primary { background: #2f6b45; font-weight: 600; }
   select, input[type="text"] {
-    background: #1c2026; color: #eee; border: 1px solid #343a42; border-radius: 6px; padding: 7px 10px;
+    background: #1c2026; color: #eee; border: 1px solid #343a42; border-radius: 6px; padding: 9px 10px;
+    font-size: 16px; /* >=16px stops iOS zooming on focus */
   }
-  .seek-wrap { flex: 1 1 220px; display: flex; align-items: center; gap: 8px; min-width: 200px; }
-  .seek-wrap input[type="range"] { flex: 1; }
+  .seek-wrap { flex: 1 1 100%; display: block; min-width: 200px; }
+  .seek-wrap .slider { margin: 4px 0 0; }
   .time { font-variant-numeric: tabular-nums; color: #b8b2a4; font-size: 0.88rem; min-width: 96px; }
   .meter {
-    width: 120px; height: 10px; background: #0e1014; border-radius: 4px; overflow: hidden; border: 1px solid #343a42;
+    width: 160px; height: 10px; background: #0e1014; border-radius: 4px; overflow: hidden; border: 1px solid #343a42;
   }
   .meter > i { display: block; height: 100%; width: 0%; background: linear-gradient(90deg, #2f6b45, #c8b99a 70%, #8d1d1d); }
   .stem-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -48,12 +49,58 @@
   }
   .stem h2 { margin: 0 0 8px; font-size: 1.05rem; color: #e0b4b4; letter-spacing: 0.04em; }
   .stem-actions { display: flex; gap: 6px; margin-bottom: 8px; }
-  label.slider {
-    display: grid; grid-template-columns: 110px 1fr 56px; gap: 8px; align-items: center;
-    margin: 7px 0; font-size: 0.9rem;
+  /* ---- touch-friendly sliders (built at runtime from label.slider) ---- */
+  button, .fader { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+  .slider { margin: 10px 0 14px; font-size: 0.95rem; }
+  .slider-head { display: flex; align-items: center; gap: 10px; min-height: 30px; }
+  .slider-name { flex: 1 1 auto; color: #cfc8b8; }
+  .slider-head output { min-width: 78px; font-size: 1rem; font-weight: 600; color: #f1ead9; }
+  .slider-row { display: flex; align-items: center; gap: 8px; }
+  .step-btn, .reset-btn {
+    flex: 0 0 auto; min-width: 44px; height: 44px; border: 0; border-radius: 10px;
+    background: #2a3038; color: #f1ead9; font-size: 1.35rem; line-height: 1; padding: 0;
+    -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
   }
-  label.slider input[type="range"] { width: 100%; }
+  .step-btn:active, .reset-btn:active { background: #8d1d1d; }
+  .reset-btn { min-width: 44px; height: 34px; font-size: 1.05rem; background: #20252c; color: #b9b2a3; }
+  .fader {
+    position: relative; flex: 1 1 auto; min-width: 0; height: 48px; display: flex; align-items: center;
+    touch-action: pan-y; /* vertical swipes still scroll the page; horizontal drags move the slider */
+    -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; cursor: pointer;
+  }
+  .fader input[type="range"] {
+    pointer-events: none; /* the .fader wrapper handles touch/mouse */
+    -webkit-appearance: none; appearance: none; width: 100%; height: 48px; margin: 0; background: transparent;
+    --pct: 50%;
+  }
+  .fader input[type="range"]:focus { outline: none; }
+  .fader input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px #c8b99a88; }
+  .fader input[type="range"]::-webkit-slider-runnable-track {
+    height: 12px; border-radius: 6px; border: 1px solid #3a414b;
+    background: linear-gradient(90deg, #a83a2a 0, #c8b99a var(--pct), #0e1014 var(--pct));
+  }
+  .fader input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none; width: 32px; height: 32px; margin-top: -11px; border-radius: 50%;
+    background: #f1ead9; border: 3px solid #8d1d1d; box-shadow: 0 2px 6px #000a;
+  }
+  .fader.active input[type="range"]::-webkit-slider-thumb { background: #ffd9a0; transform: scale(1.12); }
+  .fader input[type="range"]::-moz-range-track { height: 12px; border-radius: 6px; background: #0e1014; border: 1px solid #3a414b; }
+  .fader input[type="range"]::-moz-range-progress { height: 12px; border-radius: 6px; background: #c8b99a; }
+  .fader input[type="range"]::-moz-range-thumb { width: 28px; height: 28px; border-radius: 50%; background: #f1ead9; border: 3px solid #8d1d1d; }
+  .fader input[type="range"]:disabled { opacity: 0.4; }
+  .slider.flash .slider-head output { color: #9fe0a8; }
   output { text-align: right; font-variant-numeric: tabular-nums; color: #d9d3c5; }
+  .bed-toggle { display: flex; gap: 6px; margin: 4px 0 6px; flex-wrap: wrap; }
+  .bed-toggle button { min-height: 40px; padding: 8px 12px; font-size: 0.9rem; }
+  .vmeter { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: #8d887c; margin-top: 4px; }
+  .vmeter .meter { flex: 1; width: auto; }
+  .build { color: #6d695f; }
+  @media (max-width: 520px) {
+    main { padding: 16px 10px 72px; }
+    fieldset { padding: 10px 10px 12px; margin: 12px 0; }
+    .stem, .transport { padding: 10px; }
+    .slider-row { gap: 6px; }
+  }
   .hint { color: #8d887c; font-size: 0.82rem; margin: 6px 0 0; }
   .status {
     margin-top: 12px; padding: 10px 12px; border-radius: 8px; background: #1a1e24; border: 1px solid #2c3138;
@@ -68,9 +115,9 @@
 </head>
 <body>
 <main>
-  <div class="nav">Chase live mixer · full mix + vocals · free hosting</div>
+  <div class="nav">Chase live mixer · backing + vocals · <span class="build" id="buildTag"></span></div>
   <h1>Live mix</h1>
-  <p class="lead">Whole-mix EQ plus vocal stem (reverb / EQ / gain). Two synced tracks — no 4-stem drift. Tap Load, then Play.</p>
+  <p class="lead">Backing (instrumental or original full mix) plus the vocal stem through vocal EQ → reverb → gain. Tap Load, then Play. Drag sliders sideways (swipe up/down still scrolls); double-tap a slider or tap ↺ to reset; −/+ for fine steps.</p>
 
   <div class="transport">
     <label>Project
@@ -80,29 +127,39 @@
     <button type="button" id="btnPlay" disabled>Play</button>
     <button type="button" class="ghost" id="btnPause" disabled>Pause</button>
     <button type="button" class="ghost" id="btnStop" disabled>Stop</button>
-    <div class="seek-wrap">
-      <input type="range" id="seek" min="0" max="0" step="0.01" value="0" disabled>
-      <span class="time" id="timeLabel">0:00 / 0:00</span>
-    </div>
     <div class="meter" title="Peak"><i id="meterBar"></i></div>
-    <label style="display:flex;align-items:center;gap:6px;font-size:0.88rem;">Master
-      <input type="range" id="masterDb" min="-24" max="12" step="0.5" value="-3" style="width:110px">
+    <div class="seek-wrap">
+      <label class="slider" data-nobuttons data-noreset data-absolute>position
+        <input type="range" id="seek" min="0" max="0" step="0.01" value="0" disabled>
+        <output class="time" id="timeLabel">0:00 / 0:00</output>
+      </label>
+    </div>
+  </div>
+
+  <fieldset>
+    <legend>Master</legend>
+    <label class="slider" data-unit="dB">master dB
+      <input type="range" id="masterDb" min="-24" max="12" step="0.5" value="-3">
       <output id="masterOut">-3</output>
     </label>
-  </div>
+  </fieldset>
 
   <div class="stem-grid">
     <div class="stem" data-stem="full">
-      <h2>Full mix</h2>
+      <h2>Backing</h2>
+      <div class="bed-toggle" role="group" aria-label="Backing track">
+        <button type="button" class="tiny" id="bedInst">Instrumental</button>
+        <button type="button" class="tiny" id="bedFull">Original full mix</button>
+      </div>
       <div class="stem-actions">
         <button type="button" class="tiny mute-btn" data-stem="full">Mute</button>
         <button type="button" class="tiny solo-btn" data-stem="full">Solo</button>
       </div>
-      <label class="slider">gain dB
+      <label class="slider" data-unit="dB">gain dB
         <input type="range" id="gain_full" min="-24" max="12" step="0.5" value="0">
         <output>0</output>
       </label>
-      <p class="hint">Complete song — Mix EQ applies here</p>
+      <p class="hint" id="bedHint">Instrumental = full mix with the vocal removed, so the only vocal you hear is the stem below (EQ/reverb fully audible). Original full mix already contains the dry vocal, which masks vocal FX. Mix EQ applies to the backing.</p>
     </div>
     <div class="stem" data-stem="vocals">
       <h2>Vocals</h2>
@@ -110,38 +167,39 @@
         <button type="button" class="tiny mute-btn" data-stem="vocals">Mute</button>
         <button type="button" class="tiny solo-btn" data-stem="vocals">Solo</button>
       </div>
-      <label class="slider">gain dB
+      <label class="slider" data-unit="dB">gain dB
         <input type="range" id="gain_vocals" min="-24" max="12" step="0.5" value="-3">
         <output>-3</output>
       </label>
-      <p class="hint">Demucs vocals layered on the full mix — Solo to verify; default −3 dB so FX cut through</p>
+      <div class="vmeter">vocal FX out <div class="meter"><i id="vocalMeterBar"></i></div></div>
+      <p class="hint">Demucs vocal stem → vocal EQ → reverb → gain (default −3 dB). Solo to hear it alone.</p>
     </div>
   </div>
 
   <div class="eq-cols">
     <fieldset>
       <legend>Vocal EQ</legend>
-      <label class="slider">highpass Hz
+      <label class="slider" data-unit="Hz">highpass
         <input type="range" id="vocal_hp" min="20" max="300" step="1" value="90">
         <output>90</output>
       </label>
-      <label class="slider">lows
+      <label class="slider" data-unit="dB">lows
         <input type="range" id="veq_lows" min="-12" max="12" step="0.5" value="0">
         <output>0</output>
       </label>
-      <label class="slider">low mids
+      <label class="slider" data-unit="dB">low mids
         <input type="range" id="veq_low_mids" min="-12" max="12" step="0.5" value="0">
         <output>0</output>
       </label>
-      <label class="slider">mids
+      <label class="slider" data-unit="dB">mids
         <input type="range" id="veq_mids" min="-12" max="12" step="0.5" value="0">
         <output>0</output>
       </label>
-      <label class="slider">presence
+      <label class="slider" data-unit="dB">presence
         <input type="range" id="veq_presence" min="-12" max="12" step="0.5" value="0">
         <output>0</output>
       </label>
-      <label class="slider">air
+      <label class="slider" data-unit="dB">air
         <input type="range" id="veq_air" min="-12" max="12" step="0.5" value="0">
         <output>0</output>
       </label>
@@ -151,23 +209,23 @@
     <fieldset>
       <legend>Mix EQ</legend>
       <p class="hint">Applied to the full mix bus</p>
-      <label class="slider">lows
+      <label class="slider" data-unit="dB">lows
         <input type="range" id="meq_lows" min="-12" max="12" step="0.5" value="0">
         <output>0</output>
       </label>
-      <label class="slider">low mids
+      <label class="slider" data-unit="dB">low mids
         <input type="range" id="meq_low_mids" min="-12" max="12" step="0.5" value="0">
         <output>0</output>
       </label>
-      <label class="slider">mids
+      <label class="slider" data-unit="dB">mids
         <input type="range" id="meq_mids" min="-12" max="12" step="0.5" value="4">
         <output>4</output>
       </label>
-      <label class="slider">presence
+      <label class="slider" data-unit="dB">presence
         <input type="range" id="meq_presence" min="-12" max="12" step="0.5" value="0">
         <output>0</output>
       </label>
-      <label class="slider">air
+      <label class="slider" data-unit="dB">air
         <input type="range" id="meq_air" min="-12" max="12" step="0.5" value="0">
         <output>0</output>
       </label>
@@ -175,8 +233,8 @@
   </div>
 
   <fieldset>
-    <legend>Reverb</legend>
-    <p class="hint">Vocal path only. Wet/dry update live; room &amp; damping rebuild the impulse.</p>
+    <legend>Vocal reverb</legend>
+    <p class="hint">Vocal path only. Wet/dry update live; room = tail length (≈0.3–5 s), damping = how fast the highs die away.</p>
     <label class="slider">wet
       <input type="range" id="rev_wet" min="0" max="1" step="0.01" value="0.42">
       <output>0.42</output>
@@ -186,12 +244,12 @@
       <output>0.70</output>
     </label>
     <label class="slider">room
-      <input type="range" id="rev_room" min="0" max="1" step="0.01" value="0.86">
-      <output>0.86</output>
+      <input type="range" id="rev_room" min="0" max="1" step="0.01" value="0.62">
+      <output>0.62</output>
     </label>
     <label class="slider">damping
-      <input type="range" id="rev_damp" min="0" max="1" step="0.01" value="0.25">
-      <output>0.25</output>
+      <input type="range" id="rev_damp" min="0" max="1" step="0.01" value="0.22">
+      <output>0.22</output>
     </label>
   </fieldset>
 
@@ -214,6 +272,7 @@
 (() => {
   const TRACKS = ["full", "vocals"];
   const ASSET_BASE = "../";
+  const BUILD = "2026-10-07-fx2";
   const EQ_SPECS = [
     { id: "lows", type: "lowshelf", freq: 90, Q: 0.707 },
     { id: "low_mids", type: "peaking", freq: 250, Q: 1.0 },
@@ -236,10 +295,208 @@
     const sec = Math.floor(s % 60);
     return m + ":" + String(sec).padStart(2, "0");
   }
-  function syncOutput(input) {
-    const out = input.parentElement && input.parentElement.querySelector("output");
-    if (out) out.textContent = input.value;
+  function stepDecimals(input) {
+    const st = String(input.step || "1");
+    const i = st.indexOf(".");
+    return i < 0 ? 0 : st.length - i - 1;
   }
+  function fmtValue(input) {
+    const unit = input.dataset.unit || "";
+    const v = parseFloat(input.value);
+    let txt = v.toFixed(Math.min(2, stepDecimals(input)));
+    if (unit === "dB") txt = (v > 0 ? "+" : v < 0 ? "\u2212" : "") + Math.abs(v).toFixed(1);
+    return unit ? txt + " " + unit : txt;
+  }
+  function updateFill(input) {
+    const min = parseFloat(input.min), max = parseFloat(input.max), v = parseFloat(input.value);
+    const pct = max > min ? ((v - min) / (max - min)) * 100 : 0;
+    input.style.setProperty("--pct", pct.toFixed(2) + "%");
+  }
+  function syncOutput(input) {
+    updateFill(input);
+    if (input.id === "seek") return; // seek's output is the time label
+    const box = input.closest(".slider") || input.parentElement;
+    const out = box && box.querySelector("output");
+    if (out) out.textContent = fmtValue(input);
+  }
+
+  // Set a range value (clamped + snapped to step) and optionally fire "input" so the audio graph updates.
+  function setRangeValue(input, v, fire) {
+    const min = parseFloat(input.min), max = parseFloat(input.max);
+    const step = parseFloat(input.step) || 1;
+    v = Math.max(min, Math.min(max, parseFloat(v)));
+    v = min + Math.round((v - min) / step) * step;
+    v = Math.max(min, Math.min(max, v));
+    const next = v.toFixed(stepDecimals(input));
+    if (next === input.value && !fire) return;
+    const changed = next !== input.value;
+    input.value = next;
+    syncOutput(input);
+    if (fire && changed) input.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
+  function holdRepeat(btn, fn) {
+    let t = null, iv = null;
+    const stop = () => { clearTimeout(t); clearInterval(iv); t = iv = null; };
+    btn.addEventListener("pointerdown", (e) => {
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      e.preventDefault();
+      fn();
+      stop();
+      t = setTimeout(() => { iv = setInterval(fn, 60); }, 380);
+    });
+    ["pointerup", "pointerleave", "pointercancel"].forEach((ev) => btn.addEventListener(ev, stop));
+    btn.addEventListener("click", (e) => { if (e.detail === 0) fn(); }); // keyboard activation
+    btn.addEventListener("contextmenu", (e) => e.preventDefault());
+  }
+
+  // Pointer handling for one fader. Touch: horizontal drag moves the value relative to where it was
+  // (no jump on touch-down), vertical swipe is left to the browser so the page still scrolls,
+  // double-tap resets. Mouse: click/drag jumps to the pointer like a normal slider.
+  function attachFader(fader, input, opts) {
+    let st = null;
+    let lastTap = 0;
+    const PAD = 16; // half thumb width
+    const span = () => parseFloat(input.max) - parseFloat(input.min);
+    const valueAtX = (x) => {
+      const r = fader.getBoundingClientRect();
+      const f = Math.max(0, Math.min(1, (x - r.left - PAD) / Math.max(1, r.width - 2 * PAD)));
+      return parseFloat(input.min) + f * span();
+    };
+    const begin = (e) => {
+      st.drag = true;
+      try { fader.setPointerCapture(e.pointerId); } catch (_) {}
+      fader.classList.add("active");
+      input.dispatchEvent(new CustomEvent("faderstart"));
+    };
+    const reset = () => {
+      if (opts.noReset) return;
+      setRangeValue(input, input.dataset.default, true);
+      const box = input.closest(".slider");
+      if (box) { box.classList.add("flash"); setTimeout(() => box.classList.remove("flash"), 450); }
+    };
+    fader.addEventListener("pointerdown", (e) => {
+      if (input.disabled) return;
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      st = { id: e.pointerId, x0: e.clientX, y0: e.clientY, v0: parseFloat(input.value), drag: false,
+             mouse: e.pointerType === "mouse", abs: e.pointerType === "mouse" || !!opts.absolute };
+      if (st.mouse) {
+        e.preventDefault();
+        begin(e);
+        setRangeValue(input, valueAtX(e.clientX), true);
+      }
+    });
+    fader.addEventListener("pointermove", (e) => {
+      if (!st || e.pointerId !== st.id) return;
+      const dx = e.clientX - st.x0, dy = e.clientY - st.y0;
+      if (!st.drag) {
+        if (Math.abs(dx) > 6 && Math.abs(dx) > Math.abs(dy)) {
+          begin(e);
+          st.x0 = e.clientX; // re-baseline so the value doesn't jump by the 6px slop
+          st.v0 = parseFloat(input.value);
+        } else if (Math.abs(dy) > 10) {
+          st = null; // vertical swipe: let the page scroll
+          return;
+        } else return;
+      }
+      e.preventDefault();
+      if (st.abs) {
+        setRangeValue(input, valueAtX(e.clientX), true);
+      } else {
+        const r = fader.getBoundingClientRect();
+        setRangeValue(input, st.v0 + ((e.clientX - st.x0) / Math.max(1, r.width - 2 * PAD)) * span(), true);
+      }
+    });
+    const end = (e, cancelled) => {
+      if (!st || e.pointerId !== st.id) return;
+      const s0 = st;
+      st = null;
+      if (s0.drag) {
+        fader.classList.remove("active");
+        input.dispatchEvent(new CustomEvent("faderend"));
+        return;
+      }
+      if (cancelled || s0.mouse) return;
+      // touch tap (no drag)
+      const now = performance.now();
+      if (!opts.noReset && now - lastTap < 350) { lastTap = 0; reset(); return; }
+      lastTap = now;
+      if (opts.absolute) {
+        input.dispatchEvent(new CustomEvent("faderstart"));
+        setRangeValue(input, valueAtX(e.clientX), true);
+        input.dispatchEvent(new CustomEvent("faderend"));
+      }
+    };
+    fader.addEventListener("pointerup", (e) => end(e, false));
+    fader.addEventListener("pointercancel", (e) => end(e, true));
+    // Belt and braces for iOS: once a horizontal drag has started, never let the page scroll.
+    fader.addEventListener("touchmove", (e) => { if (st && st.drag) e.preventDefault(); }, { passive: false });
+    fader.addEventListener("dblclick", (e) => { e.preventDefault(); reset(); });
+    fader.addEventListener("contextmenu", (e) => e.preventDefault());
+  }
+
+  // Turn every <label class="slider"> (text + range + output) into a touch-friendly control:
+  // name + value + reset on top, then [−] [big fader] [+].
+  function enhanceSlider(label) {
+    const input = label.querySelector("input[type=range]");
+    if (!input) return;
+    const out = label.querySelector("output") || document.createElement("output");
+    const name = Array.from(label.childNodes).filter((n) => n.nodeType === 3).map((n) => n.textContent).join(" ").trim();
+    const opts = {
+      noButtons: label.hasAttribute("data-nobuttons"),
+      noReset: label.hasAttribute("data-noreset"),
+      absolute: label.hasAttribute("data-absolute"),
+    };
+    if (label.dataset.unit) input.dataset.unit = label.dataset.unit;
+    input.dataset.default = input.getAttribute("value");
+    const wrap = document.createElement("div");
+    wrap.className = "slider";
+    const head = document.createElement("div");
+    head.className = "slider-head";
+    const nm = document.createElement("span");
+    nm.className = "slider-name";
+    nm.textContent = name;
+    head.append(nm, out);
+    const row = document.createElement("div");
+    row.className = "slider-row";
+    const fader = document.createElement("div");
+    fader.className = "fader";
+    label.parentNode.insertBefore(wrap, label);
+    fader.appendChild(input);
+    if (!opts.noReset) {
+      const rb = document.createElement("button");
+      rb.type = "button";
+      rb.className = "reset-btn";
+      rb.textContent = "\u21BA";
+      rb.title = "Reset to " + input.dataset.default;
+      rb.setAttribute("aria-label", "Reset " + name + " to " + input.dataset.default);
+      rb.addEventListener("click", () => { setRangeValue(input, input.dataset.default, true); });
+      head.appendChild(rb);
+    }
+    if (!opts.noButtons) {
+      const mk = (txt, dir) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "step-btn";
+        b.textContent = txt;
+        b.setAttribute("aria-label", (dir < 0 ? "Decrease " : "Increase ") + name);
+        holdRepeat(b, () => {
+          if (input.disabled) return;
+          setRangeValue(input, parseFloat(input.value) + dir * (parseFloat(input.step) || 1), true);
+        });
+        return b;
+      };
+      row.append(mk("\u2212", -1), fader, mk("+", 1));
+    } else {
+      row.append(fader);
+    }
+    wrap.append(head, row);
+    label.remove();
+    attachFader(fader, input, opts);
+    syncOutput(input);
+  }
+  document.querySelectorAll("label.slider").forEach(enhanceSlider);
+  $("buildTag").textContent = "build " + BUILD;
   function downloadBlob(blob, filename) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -276,6 +533,13 @@
   let dryGain = null;
   let wetGain = null;
   let convolver = null;
+  let reverbSend = null;
+  let vocalInTap = null;
+  let vocalOutTap = null;
+  let vocalWatch = { t: 0, peak: 0, warned: false };
+  let convolverTimer = 0;
+  let bedMode = "inst";
+  try { if (localStorage.getItem("clm.bed") === "full") bedMode = "full"; } catch (_) {}
   let vocalBus = null;
   let vocalComp = null;
   let vocalMakeup = null;
@@ -321,40 +585,67 @@
     return nodes;
   }
 
+  // Synthetic stereo reverb impulse.
+  //  room    0..1 -> RT60 0.25 s .. 5 s (bigger room = longer tail) + 8..38 ms pre-delay
+  //  damping 0..1 -> how fast the highs die away inside the tail (0 = bright/airy, 1 = dark)
+  // Seeded noise so rebuilding with the same settings gives the same sound.
   function buildImpulse(audioCtx, room, damp) {
-    const roomCl = Math.max(0, Math.min(1, room));
-    const dampCl = Math.max(0, Math.min(1, damp));
-    const lengthSec = 0.4 + roomCl * 3.6;
-    const len = Math.floor(audioCtx.sampleRate * lengthSec);
-    const buf = audioCtx.createBuffer(2, len, audioCtx.sampleRate);
-    const decay = 2.5 + roomCl * 6;
-    const hf = 0.3 + (1 - dampCl) * 0.7;
+    const sr = audioCtx.sampleRate;
+    const r = Math.max(0, Math.min(1, room));
+    const d = Math.max(0, Math.min(1, damp));
+    const rt60 = 0.25 + 4.75 * r * r;
+    const pre = Math.floor(sr * (0.008 + 0.03 * r));
+    const tailLen = Math.floor(sr * Math.min(6, rt60 * 1.15));
+    const len = pre + tailLen;
+    const buf = audioCtx.createBuffer(2, len, sr);
+    const k = 6.907755 / rt60; // e^(-k*rt60) = -60 dB
+    const fc0 = 14000 - 9000 * d;
+    const hfDecay = 0.5 + d * 5;
+    const twoPiOverSr = (2 * Math.PI) / sr;
     for (let ch = 0; ch < 2; ch++) {
       const data = buf.getChannelData(ch);
+      let seed = (ch ? 0x9e3779b9 : 0x2545f491) ^ Math.floor(r * 1000) ^ (Math.floor(d * 1000) << 10);
+      const rand = () => {
+        seed |= 0; seed = (seed + 0x6d2b79f5) | 0;
+        let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
       let lp = 0;
-      for (let i = 0; i < len; i++) {
-        const t = i / audioCtx.sampleRate;
-        let n = (Math.random() * 2 - 1) * Math.exp(-decay * t);
-        lp = lp + hf * (n - lp);
-        n = lp;
-        if (ch === 1) n *= (i % 2 === 0 ? 0.92 : 1.08);
-        data[i] = n;
-      }
-      let peak = 0;
-      for (let i = 0; i < len; i++) peak = Math.max(peak, Math.abs(data[i]));
-      if (peak > 1e-6) {
-        const g = 0.85 / peak;
-        for (let i = 0; i < len; i++) data[i] *= g;
+      for (let i = 0; i < tailLen; i++) {
+        const t = i / sr;
+        const fc = Math.max(200, fc0 * Math.exp(-hfDecay * t));
+        const a = 1 - Math.exp(-twoPiOverSr * fc);
+        lp += a * ((rand() * 2 - 1) - lp);
+        // 20 ms fade-in so the wet signal blooms instead of clicking
+        const fadeIn = t < 0.02 ? t / 0.02 : 1;
+        data[pre + i] = lp * Math.exp(-k * t) * fadeIn;
       }
     }
     return buf;
   }
 
+  // Rebuild = swap in a fresh ConvolverNode (re-assigning .buffer on a live node is unreliable in
+  // Safari). The old node keeps ringing briefly so the tail doesn't cut off.
   function rebuildConvolver() {
-    if (!ctx || !convolver) return;
+    if (!ctx || !reverbSend || !wetGain) return;
     const room = parseFloat($("rev_room").value);
     const damp = parseFloat($("rev_damp").value);
-    convolver.buffer = buildImpulse(ctx, room, damp);
+    const c = ctx.createConvolver();
+    c.normalize = true;
+    c.buffer = buildImpulse(ctx, room, damp);
+    c.connect(wetGain);
+    reverbSend.connect(c);
+    const old = convolver;
+    convolver = c;
+    if (old) {
+      try { reverbSend.disconnect(old); } catch (_) {}
+      setTimeout(() => { try { old.disconnect(); } catch (_) {} }, 2500);
+    }
+  }
+  function scheduleConvolverRebuild() {
+    clearTimeout(convolverTimer);
+    convolverTimer = setTimeout(rebuildConvolver, 120);
   }
 
   function ensureGraph() {
@@ -378,9 +669,7 @@
     dryGain.gain.value = parseFloat($("rev_dry").value);
     wetGain.gain.value = parseFloat($("rev_wet").value);
 
-    convolver = ctx.createConvolver();
-    convolver.normalize = true;
-    rebuildConvolver();
+    reverbSend = ctx.createGain();
 
     vocalBus = ctx.createGain();
     vocalComp = ctx.createDynamicsCompressor();
@@ -396,29 +685,41 @@
     masterGain.gain.value = dbToLin(parseFloat($("masterDb").value));
     analyser = ctx.createAnalyser();
     analyser.fftSize = 2048;
+    vocalInTap = ctx.createAnalyser();
+    vocalInTap.fftSize = 2048;
+    vocalOutTap = ctx.createAnalyser();
+    vocalOutTap.fftSize = 2048;
 
     // full → mixEQ → master
     trackGains.full.connect(mixEQ.input);
     mixEQ.output.connect(fullBus);
     fullBus.connect(masterGain);
 
-    // vocals → HP → EQ → light peak tamer → dry/wet reverb → master
+    // vocals → gain → HP → EQ → light peak tamer → split: dry gain + (send → convolver → wet gain) → vocal bus → master
     trackGains.vocals.connect(vocalHP);
     vocalHP.connect(vocalEQ.input);
     vocalEQ.output.connect(vocalComp);
     vocalComp.connect(vocalMakeup);
     vocalMakeup.connect(dryGain);
-    vocalMakeup.connect(convolver);
-    convolver.connect(wetGain);
+    vocalMakeup.connect(reverbSend);
+    rebuildConvolver(); // reverbSend → convolver → wetGain
     dryGain.connect(vocalBus);
     wetGain.connect(vocalBus);
     vocalBus.connect(masterGain);
+    vocalBus.connect(vocalOutTap);
 
     masterGain.connect(analyser);
     analyser.connect(ctx.destination);
 
     recordDest = ctx.createMediaStreamDestination();
     analyser.connect(recordDest);
+
+    // Debug handle (used by the headless graph test; harmless in production).
+    window.__mixer = {
+      build: BUILD, ctx, analyser, vocalInTap, vocalOutTap,
+      get convolver() { return convolver; }, dryGain, wetGain, vocalHP, vocalEQ, mixEQ, trackGains, masterGain,
+      get bedMode() { return bedMode; }, mediaSources,
+    };
   }
 
   function pauseAllElements() {
@@ -534,7 +835,7 @@
   }
 
   function updateSeekUI(pos) {
-    if (!seekDragging) $("seek").value = String(pos);
+    if (!seekDragging) { $("seek").value = String(pos); updateFill($("seek")); }
     $("timeLabel").textContent = fmtTime(pos) + " / " + fmtTime(duration);
   }
 
@@ -542,12 +843,29 @@
     if (meterRaf) cancelAnimationFrame(meterRaf);
     const loop = () => {
       if (playing) updateSeekUI(currentOffset());
-      if (analyser) {
-        const data = new Float32Array(analyser.fftSize);
-        analyser.getFloatTimeDomainData(data);
+      const peakOf = (an) => {
+        const data = new Float32Array(an.fftSize);
+        an.getFloatTimeDomainData(data);
         let peak = 0;
         for (let i = 0; i < data.length; i++) peak = Math.max(peak, Math.abs(data[i]));
-        $("meterBar").style.width = Math.min(100, peak * 100).toFixed(1) + "%";
+        return peak;
+      };
+      if (analyser) $("meterBar").style.width = Math.min(100, peakOf(analyser) * 100).toFixed(1) + "%";
+      if (vocalOutTap) $("vocalMeterBar").style.width = Math.min(100, peakOf(vocalOutTap) * 100).toFixed(1) + "%";
+      // Watchdog: if the vocal element is playing but no samples reach Web Audio, the browser is
+      // bypassing the graph (EQ/reverb can't work) — say so instead of failing silently.
+      const va = audioEls.vocals;
+      if (playing && vocalInTap && va && !va.paused && !vocalWatch.warned) {
+        vocalWatch.peak = Math.max(vocalWatch.peak, peakOf(vocalInTap));
+        if (!vocalWatch.t) vocalWatch.t = performance.now();
+        if (performance.now() - vocalWatch.t > 8000) {
+          if (vocalWatch.peak < 1e-5) {
+            vocalWatch.warned = true;
+            setStatus("Vocals are playing but not reaching the Web Audio graph on this device, so vocal EQ/reverb can't act. Reload the page and tap Load again (ctx " + (ctx && ctx.state) + ").", "err");
+          } else {
+            vocalWatch.warned = true; // verified OK once — stop checking
+          }
+        }
       }
       meterRaf = requestAnimationFrame(loop);
     };
@@ -555,7 +873,7 @@
   }
 
   function wireLiveParams() {
-    document.querySelectorAll("label.slider input[type=range], #masterDb").forEach((el) => {
+    document.querySelectorAll(".slider input[type=range]:not(#seek)").forEach((el) => {
       syncOutput(el);
       el.addEventListener("input", () => {
         syncOutput(el);
@@ -569,7 +887,7 @@
         else if (id.startsWith("meq_") && mixEQ[id.slice(4)]) mixEQ[id.slice(4)].gain.setValueAtTime(parseFloat(el.value), t);
         else if (id === "rev_wet" && wetGain) wetGain.gain.setValueAtTime(parseFloat(el.value), t);
         else if (id === "rev_dry" && dryGain) dryGain.gain.setValueAtTime(parseFloat(el.value), t);
-        else if (id === "rev_room" || id === "rev_damp") rebuildConvolver();
+        else if (id === "rev_room" || id === "rev_damp") scheduleConvolverRebuild();
       });
     });
 
@@ -592,7 +910,7 @@
   }
 
   async function loadProjects() {
-    const res = await fetch(ASSET_BASE + "projects.json");
+    const res = await fetch(ASSET_BASE + "projects.json?v=" + BUILD);
     if (!res.ok) throw new Error("projects.json HTTP " + res.status);
     projectsList = await res.json();
     const sel = $("project");
@@ -606,10 +924,55 @@
       sel.appendChild(opt);
     });
     if (!sel.value && projectsList[0]) sel.value = projectsList[0].id;
+    updateBedUI();
   }
 
   function trackUrl(projId, track, ext) {
-    return ASSET_BASE + "stems/" + encodeURIComponent(projId) + "/" + encodeURIComponent(track) + "." + (ext || "mp3");
+    return ASSET_BASE + "stems/" + encodeURIComponent(projId) + "/" + encodeURIComponent(track) + "." + (ext || "mp3") + "?v=" + BUILD;
+  }
+  // The "full" player slot plays the backing: the instrumental (full mix minus vocal) when the
+  // project has one and bed mode is "inst", otherwise the original full mix.
+  function fileFor(track, meta) {
+    meta = meta || projectMeta;
+    if (track === "full" && bedMode === "inst" && meta && meta.inst) return meta.inst;
+    return track;
+  }
+  function updateBedUI() {
+    const meta = projectsList.find((p) => p.id === $("project").value) || projectMeta;
+    const hasInst = !!(meta && meta.inst);
+    $("bedInst").disabled = !hasInst;
+    $("bedInst").classList.toggle("on", bedMode === "inst" && hasInst);
+    $("bedFull").classList.toggle("on", bedMode === "full" || !hasInst);
+  }
+  async function setBed(mode) {
+    if (mode === bedMode) return;
+    bedMode = mode;
+    try { localStorage.setItem("clm.bed", mode); } catch (_) {}
+    updateBedUI();
+    if (!tracksReady || !project || !audioEls.full) return;
+    const wasPlaying = playing;
+    const pos = currentOffset();
+    pauseAllElements();
+    playing = false;
+    const a = audioEls.full;
+    const label = mode === "inst" ? "instrumental" : "original full mix";
+    setStatus("Switching backing to " + label + "…");
+    try {
+      a.src = trackUrl(project, fileFor("full"), (projectMeta && projectMeta.ext) || "mp3");
+      await waitForAudioReady(a, "backing");
+      await new Promise((resolve) => {
+        const done = () => { clearTimeout(t); a.removeEventListener("seeked", done); resolve(); };
+        const t = setTimeout(done, 4000);
+        a.addEventListener("seeked", done);
+        syncSeekAll(pos);
+        if (Math.abs(a.currentTime - pos) < 0.05 && !a.seeking) done();
+      });
+      if (wasPlaying) await startFrom(pos);
+      else { paused = pos > 0; pauseOffset = pos; $("btnPlay").disabled = false; }
+      setStatus("Backing: " + label + (mode === "inst" ? " — vocal FX now fully audible." : " — note: this mix already contains the dry vocal."), "ok");
+    } catch (err) {
+      setStatus("Backing switch failed: " + (err && err.message ? err.message : err), "err");
+    }
   }
 
   function waitForAudioReady(audio, trackLabel) {
@@ -675,6 +1038,7 @@
     if (!a || !ctx) return null;
     const src = ctx.createMediaElementSource(a);
     src.connect(trackGains[track]);
+    if (track === "vocals" && vocalInTap) src.connect(vocalInTap);
     mediaSources[track] = src;
     return src;
   }
@@ -687,6 +1051,8 @@
     const want = projectMeta.tracks || projectMeta.stems || TRACKS;
     stopPlay();
     tracksReady = false;
+    vocalWatch = { t: 0, peak: 0, warned: false };
+    updateBedUI();
     buffers = { full: null, vocals: null };
     duration = 0;
     setStatus("Loading " + label + "…");
@@ -702,7 +1068,7 @@
         const track = TRACKS[i];
         if (want.indexOf(track) < 0) continue;
         setStatus("Loading " + track + "…");
-        const url = trackUrl(name, track, ext);
+        const url = trackUrl(name, fileFor(track, projectMeta), ext);
         try {
           const head = await fetch(url, { method: "GET", headers: { Range: "bytes=0-1" } });
           if (head.status === 404) throw new Error("Missing " + track + " for " + label + " (404)");
@@ -742,8 +1108,8 @@
       $("saveName").value = label.replace(/[^a-zA-Z0-9._-]+/g, "_") + "_live.wav";
       applyTrackGains();
       setStatus(
-        "Loaded " + label + " — full " + fmtTime(fullDur) + " + vocals " + fmtTime(vocDur) +
-        ". Play; Solo Vocals to confirm the stem (default −3 dB).",
+        "Loaded " + label + " — " + (fileFor("full") === "full" ? "full mix " : "instrumental ") + fmtTime(fullDur) +
+        " + vocals " + fmtTime(vocDur) + ". Play; vocal EQ/reverb act on the vocal stem (default −3 dB).",
         "ok"
       );
     } catch (err) {
@@ -800,7 +1166,7 @@
     for (let i = 0; i < TRACKS.length; i++) {
       const track = TRACKS[i];
       setStatus("Decoding for save… " + track);
-      const url = trackUrl(project, track, ext);
+      const url = trackUrl(project, fileFor(track), ext);
       const res = await fetch(url);
       if (!res.ok) throw new Error("Failed to fetch " + track + ": " + res.status);
       const ab = await res.arrayBuffer();
@@ -857,6 +1223,7 @@
     const conv = offline.createConvolver();
     conv.normalize = true;
     conv.buffer = buildImpulse(offline, parseFloat($("rev_room").value), parseFloat($("rev_damp").value));
+    const send = offline.createGain();
 
     const vBus = offline.createGain();
     const vComp = offline.createDynamicsCompressor();
@@ -878,7 +1245,8 @@
     vEQ.output.connect(vComp);
     vComp.connect(vMakeup);
     vMakeup.connect(dry);
-    vMakeup.connect(conv);
+    vMakeup.connect(send);
+    send.connect(conv);
     conv.connect(wet);
     dry.connect(vBus);
     wet.connect(vBus);
@@ -1092,10 +1460,10 @@
     set("meq_air", 0);
     set("rev_wet", 0.42);
     set("rev_dry", 0.70);
-    set("rev_room", 0.86);
-    set("rev_damp", 0.25);
+    set("rev_room", 0.62);
+    set("rev_damp", 0.22);
     set("masterDb", -3);
-    setStatus("Bridge defaults applied (full 0, vocals -3, mix mids +4, master -3, reverb wet 0.42).", "ok");
+    setStatus("Bridge defaults applied (backing 0, vocals −3, mix mids +4, master −3, reverb wet 0.42 / dry 0.70 / room 0.62 / damping 0.22).", "ok");
   }
 
   $("btnPlay").addEventListener("click", () => {
@@ -1112,8 +1480,7 @@
   $("btnSave").addEventListener("click", saveMix);
   $("btnPreset").addEventListener("click", applyPreset);
 
-  $("seek").addEventListener("mousedown", () => { seekDragging = true; });
-  $("seek").addEventListener("touchstart", () => { seekDragging = true; }, { passive: true });
+  $("seek").addEventListener("faderstart", () => { seekDragging = true; });
   $("seek").addEventListener("input", () => {
     updateSeekUI(parseFloat($("seek").value));
   });
@@ -1128,8 +1495,16 @@
       updateSeekUI(pos);
     }
   };
-  $("seek").addEventListener("mouseup", endSeek);
-  $("seek").addEventListener("touchend", endSeek);
+  $("seek").addEventListener("faderend", endSeek);
+  // keyboard (arrow keys) seeking
+  $("seek").addEventListener("change", () => {
+    if (seekDragging) return;
+    seekDragging = true;
+    endSeek();
+  });
+  $("bedInst").addEventListener("click", () => setBed("inst"));
+  $("bedFull").addEventListener("click", () => setBed("full"));
+  $("project").addEventListener("change", updateBedUI);
 
   wireLiveParams();
   tickMeter();
